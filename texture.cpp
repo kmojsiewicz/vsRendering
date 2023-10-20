@@ -12,8 +12,8 @@ void Texture::draw()
     }
 
     offset = 0;
-    for (y=0; y<height; y++) {
-        for (x=0; x<width; x++) {
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
             //painter->setPen(QColor::fromRgb((QRgb)data[x + offset]));
             //painter->drawPoint(x, y);
         }
@@ -30,11 +30,37 @@ int Texture::loadFromBitmap(const std::string fileName)
     return 0;
 }
 
+void Texture::set(int w, int h)
+{
+    if (data != NULL) {
+        delete data;
+    }
+    data = new TRGBColor[w * h];
+
+    width = w;
+    height = h;
+}
+
+void Texture::clear(TRGBColor col)
+{
+    int x;
+    int y;
+    int offset;
+
+    offset = 0;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            data[x + offset] = col;
+        }
+        offset += width;
+    }
+}
+
 TRGBColor Texture::getColor(int x, int y)
 {
     if (x < 0) x = 0;
-    if (x > (width - 1)) x = width -1;
+    if (x > (width - 1)) x = width - 1;
     if (y < 0) y = 0;
-    if (y > (height - 1)) y = height -1;
-    return data[x + y*width];
+    if (y > (height - 1)) y = height - 1;
+    return data[x + y * width];
 }

@@ -7,14 +7,16 @@
 class Texture
 {
 public:
-    TRGBColor *data;
+    TRGBColor* data;
     int width;
     int height;
 
     Texture() { width = 0; height = 0; data = NULL; }
     ~Texture() { if (data) delete data; }
 
+    void set(int w, int h);
     void draw();
+    void clear(TRGBColor col);
     int loadFromBitmap(const std::string fileName);
     TRGBColor getColor(int x, int y);
 };
