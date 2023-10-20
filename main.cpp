@@ -17,6 +17,25 @@ using namespace std;
 
 static float z_buffer[WND_WIDTH][WND_HEIGHT];                  // z-buffer uses heap data
 
+
+float q_rsqrt(float number)
+{
+    long i;
+    float x2, y;
+    const float threehalfs = 1.5F;
+
+    x2 = number * 0.5F;
+    y = number;
+    i = *(long*)&y;                       // evil floating point bit level hacking
+    i = 0x5f3759df - (i >> 1);               // what the fuck?
+    y = *(float*)&i;
+    y = y * (threehalfs - (x2 * y * y));   // 1st iteration
+    //y = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+
+    return y;
+}
+
+
 template <class T>
 void swap_data(T& x, T& y)
 {
@@ -46,6 +65,45 @@ struct TTriangle {
     TVertex V3;
     Texture* texture;
     float   light;
+
+    void Translate(float x, float y, float z) noexcept
+    {
+        V1.x += x; V2.x += x; V3.x += x;
+        V1.y += y; V2.y += y; V3.y += y;
+        V1.z += z; V2.z += z; V3.z += z;
+    }
+
+    void Scale(float x, float y, float z) noexcept
+    {
+        V1.x *= x; V2.x *= x; V3.x *= x;
+        V1.y *= y; V2.y *= y; V3.y *= y;
+        V1.z *= z; V2.z *= z; V3.z *= z;
+    }
+
+    TVec3d NormalVector() noexcept
+    {
+        TVec3d normal, line1, line2;
+
+        line1.x = V2.x - V1.x;
+        line1.y = V2.y - V1.y;
+        line1.z = V2.z - V1.z;
+
+        line2.x = V3.x - V1.x;
+        line2.y = V3.y - V1.y;
+        line2.z = V3.z - V1.z;
+
+        normal.x = line1.y * line2.z - line1.z * line2.y;
+        normal.y = line1.z * line2.x - line1.x * line2.z;
+        normal.z = line1.x * line2.y - line1.y * line2.x;
+
+        float inv_sqrt_nl = q_rsqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+
+        normal.x *= inv_sqrt_nl;
+        normal.y *= inv_sqrt_nl;
+        normal.z *= inv_sqrt_nl;
+
+        return normal;
+    }
 };
 
 Texture defaultTexture;
@@ -53,99 +111,6 @@ Texture defaultTexture;
 struct TMesh
 {
     vector<TTriangle> triangles;
-
-    /*   void LoadFromObjFile(std::string filename)
-       {
-           std::ifstream ifs(filename.c_str(), std::ifstream::in);
-           std::string line, key;
-           while (ifs.good() && !ifs.eof() && std::getline(ifs, line)) {
-               key = "";
-               //std::stringstream stringstream(line);
-               strstream s;
-               s << line;
-               s >> key >> std::ws;
-
-               if (key == "v") { // vertex
-                   vertex v;
-                   float x;
-                   while (!s.eof()) {
-                       stringstream >> x >> std::ws;
-                       v.v.push_back(x);
-                   }
-                   vertices.push_back(v);
-               }
-               else if (key == "vp") { // parameter
-                   vertex v;
-                   float x;
-                   while (!stringstream.eof()) {
-                       stringstream >> x >> std::ws;
-                       v.v.push_back(x);
-                   }
-                   parameters.push_back(v);
-               }
-               else if (key == "vt") { // texture coordinate
-                   vertex v;
-                   float x;
-                   while (!stringstream.eof()) {
-                       stringstream >> x >> std::ws;
-                       v.v.push_back(x);
-                   }
-                   texcoords.push_back(v);
-               }
-               else if (key == "vn") { // normal
-                   vertex v;
-                   float x;
-                   while (!stringstream.eof()) {
-                       stringstream >> x >> std::ws;
-                       v.v.push_back(x);
-                   }
-                   v.normalize();
-                   normals.push_back(v);
-               }
-               else if (key == "f") { // face
-                   face f;
-                   int v, t, n;
-                   while (!s.eof()) {
-                       s >> v >> std::ws;
-                       f.vertex.push_back(v - 1);
-                       if (s.peek() == '/') {
-                           s.get();
-                           if (s.peek() == '/') {
-                               s.get();
-                               s >> n >> std::ws;
-                               f.normal.push_back(n - 1);
-                           }
-                           else {
-                               s >> t >> std::ws;
-                               f.texture.push_back(t - 1);
-                               if (s.peek() == '/') {
-                                   s.get();
-                                   s >> n >> std::ws;
-                                   f.normal.push_back(n - 1);
-                               }
-                           }
-                       }
-                   }
-                   faces.push_back(f);
-               }
-               else {
-
-               }
-           }
-           ifs.close();
-           std::cout << "               Name: " << filename << std::endl;
-           std::cout << "           Vertices: " << number_format(vertices.size()) << std::endl;
-           std::cout << "         Parameters: " << number_format(parameters.size()) << std::endl;
-           std::cout << "Texture Coordinates: " << number_format(texcoords.size()) << std::endl;
-           std::cout << "            Normals: " << number_format(normals.size()) << std::endl;
-           std::cout << "              Faces: " << number_format(faces.size()) << std::endl << std::endl;
-           list = glGenLists(1);
-           compileList();
-           vertices.clear();
-           texcoords.clear();
-           normals.clear();
-           faces.clear();
-       }*/
 
     bool LoadFromObjectFile(std::string sfilename) {
 
@@ -252,6 +217,16 @@ public:
     }
 
 private:
+    bool printDurTimeOnce = true;
+    std::chrono::high_resolution_clock::time_point tp_start, tp_end;
+    std::chrono::duration<float> elapsed_sec;
+#define get_timepoint()           { if (printDurTimeOnce) { tp_start = std::chrono::high_resolution_clock::now(); } }
+#define print_diff_timepoint(...) { if (printDurTimeOnce) { tp_end = std::chrono::high_resolution_clock::now(); \
+                                      elapsed_sec = tp_end - tp_start; \
+                                      cout << __VA_ARGS__ << std::chrono::duration_cast<std::chrono::microseconds>(elapsed_sec).count() << " us" << endl; } }
+
+
+
     Texture leftTexture, topTexture, rightTexture, bottomTexture, frontTexture, backTexture;
 
     TMesh mesh;
@@ -279,9 +254,20 @@ private:
         o.z = i.x * m.m[0][2] + i.y * m.m[1][2] + i.z * m.m[2][2] + m.m[3][2];
         float w = i.x * m.m[0][3] + i.y * m.m[1][3] + i.z * m.m[2][3] + m.m[3][3];
 
-        if (w != 0.0f)
-        {
+        if (w != 0.0f) {
             o.x /= w; o.y /= w; o.z /= w;
+        }
+    }
+
+    void MultiplyMatrixByMatrix(TMat4x4& o, TMat4x4& m1, TMat4x4& m2)
+    {
+        int i, j, k;
+        for (i = 0; i < 4; ++i) {
+            for (j = 0; j < 4; ++j) {
+                for (k = 0; k < 4; ++k) {
+                    o.m[i][j] += m1.m[i][k] * m2.m[k][j];
+                }
+            }
         }
     }
 
@@ -765,13 +751,16 @@ public:
 
     bool OnUserUpdate(float fElapsedTime) override
     {
+        std::chrono::milliseconds elapsedMs;
         vector<TTriangle> vTrianglesToRaster;
-        TMat4x4 matRotX, matRotZ;                                           // Set up rotation matrices
+        TMat4x4 matRotX, matRotZ, matRotZX;                                 // Set up rotation matrices
 
         Clear(BLACK);
         clrZBuffer();                                                       // Clear Screen and Z buffer
 
         fTheta += 1.0f * fElapsedTime;
+
+        get_timepoint();
 
         matRotZ.m[0][0] = cosf(fTheta);                                     // Rotation Z
         matRotZ.m[0][1] = sinf(fTheta);
@@ -787,21 +776,22 @@ public:
         matRotX.m[2][2] = cosf(fTheta * 0.5f);
         matRotX.m[3][3] = 1;
 
+        MultiplyMatrixByMatrix(matRotZX, matRotZ, matRotX);                 // Rotation in Z-Axis and X-Axis
+
+        print_diff_timepoint("Rotation time     : ");
+
+        get_timepoint();
+
         for (auto tri : mesh.triangles)                                     // Draw Triangles
         {
-            TTriangle triProjected, triTranslated, triRotatedZ, triRotatedZX;
+            TVec3d normal;
+            TTriangle triProjected, triTranslated, triRotatedZX;
 
             triProjected = tri;                                             // get u and v data into projected triangles
 
-            // Rotate in Z-Axis
-            MultiplyMatrixVector(tri.V1, triRotatedZ.V1, matRotZ);
-            MultiplyMatrixVector(tri.V2, triRotatedZ.V2, matRotZ);
-            MultiplyMatrixVector(tri.V3, triRotatedZ.V3, matRotZ);
-
-            // Rotate in X-Axis
-            MultiplyMatrixVector(triRotatedZ.V1, triRotatedZX.V1, matRotX);
-            MultiplyMatrixVector(triRotatedZ.V2, triRotatedZX.V2, matRotX);
-            MultiplyMatrixVector(triRotatedZ.V3, triRotatedZX.V3, matRotX);
+            MultiplyMatrixVector(tri.V1, triRotatedZX.V1, matRotZX);
+            MultiplyMatrixVector(tri.V2, triRotatedZX.V2, matRotZX);
+            MultiplyMatrixVector(tri.V3, triRotatedZX.V3, matRotZX);
 
             // Offset into the screen
             triTranslated = triRotatedZX;
@@ -809,24 +799,7 @@ public:
             triTranslated.V2.z = triRotatedZX.V2.z + 8.0f;
             triTranslated.V3.z = triRotatedZX.V3.z + 8.0f;
 
-            TVec3d normal, line1, line2;
-
-            line1.x = triTranslated.V2.x - triTranslated.V1.x;
-            line1.y = triTranslated.V2.y - triTranslated.V1.y;
-            line1.z = triTranslated.V2.z - triTranslated.V1.z;
-
-            line2.x = triTranslated.V3.x - triTranslated.V1.x;
-            line2.y = triTranslated.V3.y - triTranslated.V1.y;
-            line2.z = triTranslated.V3.z - triTranslated.V1.z;
-
-            normal.x = line1.y * line2.z - line1.z * line2.y;
-            normal.y = line1.z * line2.x - line1.x * line2.z;
-            normal.z = line1.x * line2.y - line1.y * line2.x;
-
-            float l = sqrtf(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
-            normal.x /= l;
-            normal.y /= l;
-            normal.z /= l;
+            normal = triTranslated.NormalVector();
 
             if (normal.x * (triTranslated.V1.x - vCamera.x) +
                 normal.y * (triTranslated.V1.y - vCamera.y) +
@@ -835,53 +808,55 @@ public:
                 // Illumination
                 TVec3d light_direction = { 0.0f, 0.0f, -1.0f };
 
-                float ll = sqrtf(light_direction.x * light_direction.x + light_direction.y * light_direction.y + light_direction.z * light_direction.z);
-                light_direction.x /= ll;
-                light_direction.y /= ll;
-                light_direction.z /= ll;
+                float inv_sqrt_ll = q_rsqrt(light_direction.x * light_direction.x + light_direction.y * light_direction.y + light_direction.z * light_direction.z);
 
-                float dp = normal.x * light_direction.x +
-                    normal.y * light_direction.y +
-                    normal.z * light_direction.z;
+                light_direction.x *= inv_sqrt_ll;
+                light_direction.y *= inv_sqrt_ll;
+                light_direction.z *= inv_sqrt_ll;
+
+                float dp = normal.x * light_direction.x + normal.y * light_direction.y + normal.z * light_direction.z;
 
                 // Project triangles from 3D --> 2D
                 MultiplyMatrixVector(triTranslated.V1, triProjected.V1, matProj);
                 MultiplyMatrixVector(triTranslated.V2, triProjected.V2, matProj);
                 MultiplyMatrixVector(triTranslated.V3, triProjected.V3, matProj);
-                triProjected.light = dp;
 
-                // Scale into view
-                triProjected.V1.x += 1.0f; triProjected.V1.y += 1.0f;
-                triProjected.V2.x += 1.0f; triProjected.V2.y += 1.0f;
-                triProjected.V3.x += 1.0f; triProjected.V3.y += 1.0f;
-                triProjected.V1.x *= 0.5f * (float)ScreenWidth();
-                triProjected.V1.y *= 0.5f * (float)ScreenHeight();
-                triProjected.V1.z *= 0.5f * fFar;
-                triProjected.V2.x *= 0.5f * (float)ScreenWidth();
-                triProjected.V2.y *= 0.5f * (float)ScreenHeight();
-                triProjected.V2.z *= 0.5f * fFar;
-                triProjected.V3.x *= 0.5f * (float)ScreenWidth();
-                triProjected.V3.y *= 0.5f * (float)ScreenHeight();
-                triProjected.V3.z *= 0.5f * fFar;
+                triProjected.light = dp;
+                triProjected.Translate(1.0f, 1.0f, 0.0f);
+                triProjected.Scale(0.5f * (float)ScreenWidth(), 0.5f * (float)ScreenHeight(), 0.5f * fFar);
 
                 vTrianglesToRaster.push_back(triProjected);
             }
 
         }
+        print_diff_timepoint("Matrix projection : ");
 
         // sort triangles from back to front
+        get_timepoint();
         sort(vTrianglesToRaster.begin(), vTrianglesToRaster.end(), [](TTriangle& t1, TTriangle t2) {
             float z1 = (t1.V1.z + t1.V2.z + t1.V3.z) / 3.0f;
             float z2 = (t2.V1.z + t2.V2.z + t2.V3.z) / 3.0f;
             return z1 > z2;
             });
+        print_diff_timepoint("Sorting time      : ");
 
+        get_timepoint();
         for (auto triProjected : vTrianglesToRaster)                        // Draw Triangles sorted
         {
             fillTriangle(triProjected, WHITE * triProjected.light);         // Rasterize triangle
             //fillTriangleT(triProjected);
         }
+        print_diff_timepoint("Rendering time 1  : ");
 
+        get_timepoint();
+        for (auto triProjected : vTrianglesToRaster)                        // Draw Triangles sorted
+        {
+            //fillTriangle(triProjected, WHITE * triProjected.light);         // Rasterize triangle
+            fillTriangleT(triProjected);
+        }
+        print_diff_timepoint("Rendering time 2  : ");
+
+        printDurTimeOnce = false;
         return true;
     }
 };
@@ -890,7 +865,7 @@ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR CmdLine, int nSh
 {
     Engine3D demo;
 
-    if (demo.Construct(WND_WIDTH, WND_HEIGHT, false, false, false)) {
+    if (demo.Construct(WND_WIDTH, WND_HEIGHT, false, false, true)) {
         //if (demo.Construct(WND_WIDTH, WND_HEIGHT, 1, 1, false, false)) {
         demo.Start();
     }
