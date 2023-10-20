@@ -23,6 +23,12 @@ void swap_data(T& x, T& y)
     y = temp;
 }
 
+struct TVec3d {
+    float x;
+    float y;
+    float z;
+};
+
 struct TVertex {
     float x;
     float y;
@@ -35,7 +41,8 @@ struct TTriangle {
     TVertex V1;
     TVertex V2;
     TVertex V3;
-    Texture *texture;
+    Texture* texture;
+    float   light;
 };
 
 struct TMesh
@@ -64,6 +71,8 @@ private:
     TMesh meshCube;
     TMat4x4 matProj;
 
+    TVec3d vCamera;
+
     float fTheta;
     float fFar = 1000.0f;
 
@@ -90,20 +99,20 @@ private:
         }
     }
 
-    inline void putPixel(int x, int y, float z, TRGBColor col)
+    inline void putPixel(int x, int y, float z, TRGBColor col, float light)
     {
         if (x < 0) x = 0;
         if (x > (WND_WIDTH - 1)) x = WND_WIDTH - 1;
         if (y < 0) y = 0;
         if (y > (WND_HEIGHT - 1)) y = WND_HEIGHT - 1;
 
-        Pixel p(col.R, col.G, col.B);
-        CLayer* pDrawTarget  = GetDrawTarget();
+        Pixel p(col.R * light, col.G * light, col.B * light);
+        CLayer* pDrawTarget = GetDrawTarget();
 
-        if (z_buffer[x][y] > z) {
-            z_buffer[x][y] = z;
-            pDrawTarget->SetPixel(x, y, p);
-        }
+        //if (z_buffer[x][y] > z) {
+        //    z_buffer[x][y] = z;
+        pDrawTarget->SetPixel(x, y, p);
+        //}
     }
 
 #define SUB_PIX(a) (ceil(a)-a)
@@ -122,7 +131,7 @@ private:
         }
 
         if ((int)t.V1.y == (int)t.V3.y) return;                             // check if we have more than a zero height triangle
-        
+
         // We have to decide whether V2 is on the left side or the right one. We could do that by findng the V4, and
         // check the disatnce from V4 to V2 (V4.y = V2.y). V4 is one the edge (V1V3)
         // Using formula : I(t) = A + t(B-A) we find y = V1.y + t(V3.y - V1.y) and y = V2.y
@@ -204,7 +213,7 @@ private:
                     z += dZdX;
                     u += dUdX;
                     v += dVdX;
-                    putPixel(x, y, z, t.texture->getColor((int)u,(int)v));
+                    putPixel(x, y, z, t.texture->getColor((int)u, (int)v), t.light);
                 }
             }
             else {
@@ -213,7 +222,7 @@ private:
                     z += dZdX;
                     u += dUdX;
                     v += dVdX;
-                    putPixel(x, y, z, t.texture->getColor((int)u,(int)v));
+                    putPixel(x, y, z, t.texture->getColor((int)u, (int)v), t.light);
                 }
 
             }
@@ -258,7 +267,7 @@ private:
                 z += dZdX;
                 u += dUdX;
                 v += dVdX;
-                putPixel(x, y, z, t.texture->getColor((int)u,(int)v));
+                putPixel(x, y, z, t.texture->getColor((int)u, (int)v), t.light);
             }
             x_left += dXdY32;
             x_right += dXdY31;
@@ -372,26 +381,67 @@ public:
             triTranslated.V2.z = triRotatedZX.V2.z + 3.0f;
             triTranslated.V3.z = triRotatedZX.V3.z + 3.0f;
 
-            // Project triangles from 3D --> 2D
-            MultiplyMatrixVector(triTranslated.V1, triProjected.V1, matProj);
-            MultiplyMatrixVector(triTranslated.V2, triProjected.V2, matProj);
-            MultiplyMatrixVector(triTranslated.V3, triProjected.V3, matProj);
+            TVec3d normal, line1, line2;
 
-            // Scale into view
-            triProjected.V1.x += 1.0f; triProjected.V1.y += 1.0f;
-            triProjected.V2.x += 1.0f; triProjected.V2.y += 1.0f;
-            triProjected.V3.x += 1.0f; triProjected.V3.y += 1.0f;
-            triProjected.V1.x *= 0.5f * (float)ScreenWidth();
-            triProjected.V1.y *= 0.5f * (float)ScreenHeight();
-            triProjected.V1.z *= 0.5f * fFar;
-            triProjected.V2.x *= 0.5f * (float)ScreenWidth();
-            triProjected.V2.y *= 0.5f * (float)ScreenHeight();
-            triProjected.V2.z *= 0.5f * fFar;
-            triProjected.V3.x *= 0.5f * (float)ScreenWidth();
-            triProjected.V3.y *= 0.5f * (float)ScreenHeight();
-            triProjected.V3.z *= 0.5f * fFar;
+            line1.x = triTranslated.V2.x - triTranslated.V1.x;
+            line1.y = triTranslated.V2.y - triTranslated.V1.y;
+            line1.z = triTranslated.V2.z - triTranslated.V1.z;
 
-            drawTriangle(triProjected);                                     // Rasterize triangle
+            line2.x = triTranslated.V3.x - triTranslated.V1.x;
+            line2.y = triTranslated.V3.y - triTranslated.V1.y;
+            line2.z = triTranslated.V3.z - triTranslated.V1.z;
+
+            normal.x = line1.y * line2.z - line1.z * line2.y;
+            normal.y = line1.z * line2.x - line1.x * line2.z;
+            normal.z = line1.x * line2.y - line1.y * line2.x;
+
+            float l = sqrtf(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+            normal.x /= l;
+            normal.y /= l;
+            normal.z /= l;
+
+            //if (normal.z < 0) {
+            // 
+            if (normal.x * (triTranslated.V1.x - vCamera.x) +
+                normal.y * (triTranslated.V1.y - vCamera.y) +
+                normal.z * (triTranslated.V1.z - vCamera.z) < 0.0)
+            {
+                // Illumination
+                TVec3d light_direction = { 0.0f, 0.0f, -1.0f };
+
+                float ll = sqrtf(light_direction.x * light_direction.x + light_direction.y * light_direction.y + light_direction.z * light_direction.z);
+                light_direction.x /= ll;
+                light_direction.y /= ll;
+                light_direction.z /= ll;
+
+                float dp = normal.x * light_direction.x +
+                    normal.y * light_direction.y +
+                    normal.z * light_direction.z;
+
+                triProjected.light = dp;
+
+                // Project triangles from 3D --> 2D
+                MultiplyMatrixVector(triTranslated.V1, triProjected.V1, matProj);
+                MultiplyMatrixVector(triTranslated.V2, triProjected.V2, matProj);
+                MultiplyMatrixVector(triTranslated.V3, triProjected.V3, matProj);
+
+                // Scale into view
+                triProjected.V1.x += 1.0f; triProjected.V1.y += 1.0f;
+                triProjected.V2.x += 1.0f; triProjected.V2.y += 1.0f;
+                triProjected.V3.x += 1.0f; triProjected.V3.y += 1.0f;
+                triProjected.V1.x *= 0.5f * (float)ScreenWidth();
+                triProjected.V1.y *= 0.5f * (float)ScreenHeight();
+                triProjected.V1.z *= 0.5f * fFar;
+                triProjected.V2.x *= 0.5f * (float)ScreenWidth();
+                triProjected.V2.y *= 0.5f * (float)ScreenHeight();
+                triProjected.V2.z *= 0.5f * fFar;
+                triProjected.V3.x *= 0.5f * (float)ScreenWidth();
+                triProjected.V3.y *= 0.5f * (float)ScreenHeight();
+                triProjected.V3.z *= 0.5f * fFar;
+
+                drawTriangle(triProjected);                                     // Rasterize triangle
+            }
+
         }
 
         return true;
@@ -403,7 +453,7 @@ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR CmdLine, int nSh
     Engine3D demo;
 
     if (demo.Construct(WND_WIDTH, WND_HEIGHT, false, false, false)) {
-    //if (demo.Construct(WND_WIDTH, WND_HEIGHT, 1, 1, false, false)) {
+        //if (demo.Construct(WND_WIDTH, WND_HEIGHT, 1, 1, false, false)) {
         demo.Start();
     }
 
