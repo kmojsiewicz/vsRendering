@@ -11,6 +11,7 @@
 #include <string>
 #include <atomic>
 #include <thread>
+#include <vector>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -280,7 +281,7 @@ bool CLayer::SetPixel(int32_t x, int32_t y, Pixel p)
 
 void CLayer::Clear(Pixel p)
 {
-	std:fill(pColData.begin(), pColData.end(), p);
+	fill(pColData.begin(), pColData.end(), p);
 }
 
 void CLayer::Update()

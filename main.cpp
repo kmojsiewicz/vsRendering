@@ -7,199 +7,11 @@
 #include <algorithm>
 
 #include "platform.h"
-#include "bmploader.h"
-#include "texture.h"
-
-#define WND_WIDTH   800
-#define WND_HEIGHT  600
+#include "engine.h"
 
 using namespace std;
 
-static float z_buffer[WND_WIDTH][WND_HEIGHT];                  // z-buffer uses heap data
 
-
-float q_rsqrt(float number)
-{
-    long i;
-    float x2, y;
-    const float threehalfs = 1.5F;
-
-    x2 = number * 0.5F;
-    y = number;
-    i = *(long*)&y;                       // evil floating point bit level hacking
-    i = 0x5f3759df - (i >> 1);               // what the fuck?
-    y = *(float*)&i;
-    y = y * (threehalfs - (x2 * y * y));   // 1st iteration
-    //y = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
-
-    return y;
-}
-
-
-template <class T>
-void swap_data(T& x, T& y)
-{
-    T temp;
-    temp = x;
-    x = y;
-    y = temp;
-}
-
-struct TVec3d {
-    float x;
-    float y;
-    float z;
-};
-
-struct TVertex {
-    float x;
-    float y;
-    float z;
-    float u;
-    float v;
-};
-
-struct TTriangle {
-    TVertex V1;
-    TVertex V2;
-    TVertex V3;
-    Texture* texture;
-    float   light;
-
-    void Translate(float x, float y, float z) noexcept
-    {
-        V1.x += x; V2.x += x; V3.x += x;
-        V1.y += y; V2.y += y; V3.y += y;
-        V1.z += z; V2.z += z; V3.z += z;
-    }
-
-    void Scale(float x, float y, float z) noexcept
-    {
-        V1.x *= x; V2.x *= x; V3.x *= x;
-        V1.y *= y; V2.y *= y; V3.y *= y;
-        V1.z *= z; V2.z *= z; V3.z *= z;
-    }
-
-    TVec3d NormalVector() noexcept
-    {
-        TVec3d normal, line1, line2;
-
-        line1.x = V2.x - V1.x;
-        line1.y = V2.y - V1.y;
-        line1.z = V2.z - V1.z;
-
-        line2.x = V3.x - V1.x;
-        line2.y = V3.y - V1.y;
-        line2.z = V3.z - V1.z;
-
-        normal.x = line1.y * line2.z - line1.z * line2.y;
-        normal.y = line1.z * line2.x - line1.x * line2.z;
-        normal.z = line1.x * line2.y - line1.y * line2.x;
-
-        float inv_sqrt_nl = q_rsqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
-
-        normal.x *= inv_sqrt_nl;
-        normal.y *= inv_sqrt_nl;
-        normal.z *= inv_sqrt_nl;
-
-        return normal;
-    }
-};
-
-Texture defaultTexture;
-
-struct TMesh
-{
-    vector<TTriangle> triangles;
-
-    bool LoadFromObjectFile(std::string sfilename) {
-
-        defaultTexture.set(128, 128);
-        defaultTexture.clear(TRGBColor(255, 255, 255, 255));
-
-        vector<TVertex> verts;
-        char c;
-        std::string line, key;
-        std::ifstream ifs(sfilename.c_str(), std::ifstream::in);
-        while (ifs.good() && !ifs.eof() && std::getline(ifs, line)) {
-            key = "";
-            strstream s;
-            s << line;
-            s >> key >> std::ws;
-
-            if (key == "v") {                                               // vertex
-                TVertex v;
-                s >> v.x >> v.y >> v.z;
-                v.u = 0.0;
-                v.v = 0.0;
-                verts.push_back(v);
-            }
-            else if (key == "vp") {                                         // parameter
-            }
-            else if (key == "vt") {                                         // texture coordinate
-            }
-            else if (key == "f") {                                          // face
-                int f[3], v[3], t[3], n[3];
-                while (!s.eof()) {
-                    s >> f[0] >> std::ws;
-                    if (s.peek() == '/') {
-                        s.get();
-                        if (s.peek() == '/') {
-                            s.get();
-                            s >> n[0] >> std::ws;
-                        }
-                        else {
-                            s >> t[0] >> std::ws;
-                            if (s.peek() == '/') {
-                                s.get();
-                                s >> n[0] >> std::ws;
-                            }
-                        }
-                    }
-                    while (!s.eof()) {
-                        s >> f[1] >> std::ws;
-                        if (s.peek() == '/') {
-                            s.get();
-                            if (s.peek() == '/') {
-                                s.get();
-                                s >> n[1] >> std::ws;
-                            }
-                            else {
-                                s >> t[1] >> std::ws;
-                                if (s.peek() == '/') {
-                                    s.get();
-                                    s >> n[1] >> std::ws;
-                                }
-                            }
-                        }
-                        while (!s.eof()) {
-                            s >> f[2] >> std::ws;
-                            if (s.peek() == '/') {
-                                s.get();
-                                if (s.peek() == '/') {
-                                    s.get();
-                                    s >> n[2] >> std::ws;
-                                }
-                                else {
-                                    s >> t[2] >> std::ws;
-                                    if (s.peek() == '/') {
-                                        s.get();
-                                        s >> n[2] >> std::ws;
-                                    }
-                                }
-                            }
-                            triangles.push_back({ verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1], &defaultTexture , 1.0 });
-                        }
-                    }
-
-                }
-            }
-        }
-        ifs.close();
-
-        return true;
-    }
-};
 
 struct TMat4x4 {
     float m[4][4] = { 0 };
@@ -209,43 +21,29 @@ struct TMat4x4 {
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 
-class Engine3D : public CPlatform
+class Engine3D : public CEngine
 {
 public:
     Engine3D() {
-        sAppName = "Texturing";
+        sAppName = "Rendering";
     }
 
 private:
     bool printDurTimeOnce = true;
     std::chrono::high_resolution_clock::time_point tp_start, tp_end;
     std::chrono::duration<float> elapsed_sec;
-#define get_timepoint()           { if (printDurTimeOnce) { tp_start = std::chrono::high_resolution_clock::now(); } }
-#define print_diff_timepoint(...) { if (printDurTimeOnce) { tp_end = std::chrono::high_resolution_clock::now(); \
+    #define get_timepoint()           { if (printDurTimeOnce) { tp_start = std::chrono::high_resolution_clock::now(); } }
+    #define print_diff_timepoint(...) { if (printDurTimeOnce) { tp_end = std::chrono::high_resolution_clock::now(); \
                                       elapsed_sec = tp_end - tp_start; \
                                       cout << __VA_ARGS__ << std::chrono::duration_cast<std::chrono::microseconds>(elapsed_sec).count() << " us" << endl; } }
 
 
-
-    Texture leftTexture, topTexture, rightTexture, bottomTexture, frontTexture, backTexture;
-
+    CTexture leftTexture, topTexture, rightTexture, bottomTexture, frontTexture, backTexture;
     TMesh mesh;
     TMat4x4 matProj;
-
     TVec3d vCamera;
-
     float fTheta;
     float fFar = 1000.0f;
-
-    void clrZBuffer(void)
-    {
-        int x, y;
-        for (x = 0; x < WND_WIDTH; x++) {
-            for (y = 0; y < WND_HEIGHT; y++) {
-                z_buffer[x][y] = (float)INT_MAX;
-            }
-        }
-    }
 
     void MultiplyMatrixVector(TVertex& i, TVertex& o, TMat4x4& m)
     {
@@ -271,265 +69,13 @@ private:
         }
     }
 
-    inline void putPixel(int x, int y, float z, TRGBColor col, float light)
-    {
-        if (x < 0) x = 0;
-        if (x > (WND_WIDTH - 1)) x = WND_WIDTH - 1;
-        if (y < 0) y = 0;
-        if (y > (WND_HEIGHT - 1)) y = WND_HEIGHT - 1;
-
-        //Pixel p(col.R * light, col.G * light, col.B * light);
-        Pixel p(255 * light, 255 * light, 255 * light);
-        CLayer* pDrawTarget = GetDrawTarget();
-
-        //if (z_buffer[x][y] > z) {
-        //    z_buffer[x][y] = z;
-        pDrawTarget->SetPixel(x, y, p);
-        //}
-    }
-    bool Draw(int32_t x, int32_t y, Pixel p)
-    {
-        CLayer* pDrawTarget = GetDrawTarget();
-        pDrawTarget->SetPixel(x, y, p);
-        return true;
-    }
-
-    void DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p = WHITE, uint32_t pattern = 0xFFFFFFFF)
-    {
-        int x, y, dx, dy, dx1, dy1, px, py, xe, ye, i;
-        dx = x2 - x1; dy = y2 - y1;
-
-        auto rol = [&](void) { pattern = (pattern << 1) | (pattern >> 31); return pattern & 1; };
-
-        //olc::vi2d p1(x1, y1), p2(x2, y2);
-        //if (!ClipLineToScreen(p1, p2))
-        //	return;
-        //x1 = p1.x; y1 = p1.y;
-        //x2 = p2.x; y2 = p2.y;
-
-        // straight lines idea by gurkanctn
-        if (dx == 0) // Line is vertical
-        {
-            if (y2 < y1) std::swap(y1, y2);
-            for (y = y1; y <= y2; y++) if (rol()) Draw(x1, y, p);
-            return;
-        }
-
-        if (dy == 0) // Line is horizontal
-        {
-            if (x2 < x1) std::swap(x1, x2);
-            for (x = x1; x <= x2; x++) if (rol()) Draw(x, y1, p);
-            return;
-        }
-
-        // Line is Funk-aye
-        dx1 = abs(dx); dy1 = abs(dy);
-        px = 2 * dy1 - dx1;	py = 2 * dx1 - dy1;
-        if (dy1 <= dx1)
-        {
-            if (dx >= 0)
-            {
-                x = x1; y = y1; xe = x2;
-            }
-            else
-            {
-                x = x2; y = y2; xe = x1;
-            }
-
-            if (rol()) Draw(x, y, p);
-
-            for (i = 0; x < xe; i++)
-            {
-                x = x + 1;
-                if (px < 0)
-                    px = px + 2 * dy1;
-                else
-                {
-                    if ((dx < 0 && dy < 0) || (dx > 0 && dy > 0)) y = y + 1; else y = y - 1;
-                    px = px + 2 * (dy1 - dx1);
-                }
-                if (rol()) Draw(x, y, p);
-            }
-        }
-        else
-        {
-            if (dy >= 0)
-            {
-                x = x1; y = y1; ye = y2;
-            }
-            else
-            {
-                x = x2; y = y2; ye = y1;
-            }
-
-            if (rol()) Draw(x, y, p);
-
-            for (i = 0; y < ye; i++)
-            {
-                y = y + 1;
-                if (py <= 0)
-                    py = py + 2 * dx1;
-                else
-                {
-                    if ((dx < 0 && dy < 0) || (dx > 0 && dy > 0)) x = x + 1; else x = x - 1;
-                    py = py + 2 * (dx1 - dy1);
-                }
-                if (rol()) Draw(x, y, p);
-            }
-        }
-    }
-
-    void drawTriangle(TTriangle t)
-    {
-        DrawLine(t.V1.x, t.V1.y, t.V2.x, t.V2.y);
-        DrawLine(t.V2.x, t.V2.y, t.V3.x, t.V3.y);
-        DrawLine(t.V1.x, t.V1.y, t.V3.x, t.V3.y);
-    }
-
-    void fillTriangle(TTriangle t, Pixel p)
-    {
-        auto drawline = [&](int sx, int ex, int ny) { for (int i = sx; i <= ex; i++) Draw(i, ny, p); };
-
-        int t1x, t2x, y, minx, maxx, t1xp, t2xp;
-        bool changed1 = false;
-        bool changed2 = false;
-        int signx1, signx2, dx1, dy1, dx2, dy2;
-        int e1, e2;
-        // Sort vertices
-        if (t.V1.y > t.V2.y) { std::swap(t.V1, t.V2); }
-        if (t.V1.y > t.V3.y) { std::swap(t.V1, t.V3); }
-        if (t.V2.y > t.V3.y) { std::swap(t.V2, t.V3); }
-
-        int x1, y1, x2, y2, x3, y3;
-        x1 = t.V1.x; y1 = t.V1.y;
-        x2 = t.V2.x; y2 = t.V2.y;
-        x3 = t.V3.x; y3 = t.V3.y;
-
-        t1x = t2x = x1; y = y1;   // Starting points
-        dx1 = (int)(x2 - x1);
-        if (dx1 < 0) { dx1 = -dx1; signx1 = -1; }
-        else signx1 = 1;
-        dy1 = (int)(y2 - y1);
-
-        dx2 = (int)(x3 - x1);
-        if (dx2 < 0) { dx2 = -dx2; signx2 = -1; }
-        else signx2 = 1;
-        dy2 = (int)(y3 - y1);
-
-        if (dy1 > dx1) { std::swap(dx1, dy1); changed1 = true; }
-        if (dy2 > dx2) { std::swap(dy2, dx2); changed2 = true; }
-
-        e2 = (int)(dx2 >> 1);
-        // Flat top, just process the second half
-        if (y1 == y2) goto next;
-        e1 = (int)(dx1 >> 1);
-
-        for (int i = 0; i < dx1;) {
-            t1xp = 0; t2xp = 0;
-            if (t1x < t2x) { minx = t1x; maxx = t2x; }
-            else { minx = t2x; maxx = t1x; }
-            // process first line until y value is about to change
-            while (i < dx1) {
-                i++;
-                e1 += dy1;
-                while (e1 >= dx1) {
-                    e1 -= dx1;
-                    if (changed1) t1xp = signx1;//t1x += signx1;
-                    else          goto next1;
-                }
-                if (changed1) break;
-                else t1x += signx1;
-            }
-            // Move line
-        next1:
-            // process second line until y value is about to change
-            while (1) {
-                e2 += dy2;
-                while (e2 >= dx2) {
-                    e2 -= dx2;
-                    if (changed2) t2xp = signx2;//t2x += signx2;
-                    else          goto next2;
-                }
-                if (changed2)     break;
-                else              t2x += signx2;
-            }
-        next2:
-            if (minx > t1x) minx = t1x;
-            if (minx > t2x) minx = t2x;
-            if (maxx < t1x) maxx = t1x;
-            if (maxx < t2x) maxx = t2x;
-            drawline(minx, maxx, y);    // Draw line from min to max points found on the y
-            // Now increase y
-            if (!changed1) t1x += signx1;
-            t1x += t1xp;
-            if (!changed2) t2x += signx2;
-            t2x += t2xp;
-            y += 1;
-            if (y == y2) break;
-        }
-    next:
-        // Second half
-        dx1 = (int)(x3 - x2); if (dx1 < 0) { dx1 = -dx1; signx1 = -1; }
-        else signx1 = 1;
-        dy1 = (int)(y3 - y2);
-        t1x = x2;
-
-        if (dy1 > dx1) {   // swap values
-            std::swap(dy1, dx1);
-            changed1 = true;
-        }
-        else changed1 = false;
-
-        e1 = (int)(dx1 >> 1);
-
-        for (int i = 0; i <= dx1; i++) {
-            t1xp = 0; t2xp = 0;
-            if (t1x < t2x) { minx = t1x; maxx = t2x; }
-            else { minx = t2x; maxx = t1x; }
-            // process first line until y value is about to change
-            while (i < dx1) {
-                e1 += dy1;
-                while (e1 >= dx1) {
-                    e1 -= dx1;
-                    if (changed1) { t1xp = signx1; break; }//t1x += signx1;
-                    else          goto next3;
-                }
-                if (changed1) break;
-                else   	   	  t1x += signx1;
-                if (i < dx1) i++;
-            }
-        next3:
-            // process second line until y value is about to change
-            while (t2x != x3) {
-                e2 += dy2;
-                while (e2 >= dx2) {
-                    e2 -= dx2;
-                    if (changed2) t2xp = signx2;
-                    else          goto next4;
-                }
-                if (changed2)     break;
-                else              t2x += signx2;
-            }
-        next4:
-
-            if (minx > t1x) minx = t1x;
-            if (minx > t2x) minx = t2x;
-            if (maxx < t1x) maxx = t1x;
-            if (maxx < t2x) maxx = t2x;
-            drawline(minx, maxx, y);
-            if (!changed1) t1x += signx1;
-            t1x += t1xp;
-            if (!changed2) t2x += signx2;
-            t2x += t2xp;
-            y += 1;
-            if (y > y3) return;
-        }
-    }
-
 #define SUB_PIX(a) (ceil(a)-a)
     void fillTriangleT(TTriangle t)
     {
-        if ((t.texture->width == 0) || (t.texture->height == 0)) return;
+        int u_width = t.texture->GetWidth();
+        int v_height = t.texture->GetHeight();
+
+        if ((u_width == 0) || (v_height == 0)) return;
 
         if (t.V1.y > t.V2.y) {                                              // sort the vertices (V1,V2,V3) by their Y values
             swap_data(t.V1, t.V2);
@@ -573,11 +119,11 @@ private:
         float dUdY31 = (float)(t.V3.u - t.V1.u) * dY31;
         float dUdY32 = (float)(t.V3.u - t.V2.u) * dY32;
         float dUdX = (float)((t.V3.u - t.V1.u) * ceil(t.V2.y - t.V1.y) + (t.V1.u - t.V2.u) * ceil(t.V3.y - t.V1.y)) * dX;
-        if ((t.texture->width > 0) && (t.texture->height > 0)) {
-            dUdY21 *= (t.texture->width - 1);
-            dUdY31 *= (t.texture->width - 1);
-            dUdY32 *= (t.texture->width - 1);
-            dUdX *= (t.texture->width - 1);
+        if ((u_width > 0) && (v_height > 0)) {
+            dUdY21 *= (u_width - 1);
+            dUdY31 *= (u_width - 1);
+            dUdY32 *= (u_width - 1);
+            dUdX *= (u_width - 1);
         }
 
         // we calculate delta values ​​to find the v-value of the texture
@@ -585,11 +131,11 @@ private:
         float dVdY31 = (float)(t.V3.v - t.V1.v) * dY31;
         float dVdY32 = (float)(t.V3.v - t.V2.v) * dY32;
         float dVdX = (float)((t.V3.v - t.V1.v) * ceil(t.V2.y - t.V1.y) + (t.V1.v - t.V2.v) * ceil(t.V3.y - t.V1.y)) * dX;
-        if ((t.texture->width > 0) && (t.texture->height > 0)) {
-            dVdY21 *= (t.texture->height - 1);
-            dVdY31 *= (t.texture->height - 1);
-            dVdY32 *= (t.texture->height - 1);
-            dVdX *= (t.texture->height - 1);
+        if ((u_width > 0) && (v_height > 0)) {
+            dVdY21 *= (v_height - 1);
+            dVdY31 *= (v_height - 1);
+            dVdY32 *= (v_height - 1);
+            dVdX *= (v_height - 1);
         }
 
         if (dXdY21 > dXdY31) {
@@ -609,9 +155,9 @@ private:
         float zp = (t.V1.z + prestep * dZdY21);
         float up = (t.V1.u + prestep * dUdY21);
         float vp = (t.V1.v + prestep * dVdY21);
-        if ((t.texture->width > 0) && (t.texture->height > 0)) {
-            up *= (t.texture->width - 1);
-            vp *= (t.texture->height - 1);
+        if ((u_width > 0) && (v_height > 0)) {
+            up *= (u_width - 1);
+            vp *= (v_height - 1);
         }
 
         while (y < t.V2.y) {
@@ -624,7 +170,7 @@ private:
                     z += dZdX;
                     u += dUdX;
                     v += dVdX;
-                    putPixel(x, y, z, t.texture->getColor((int)u, (int)v), t.light);
+                    PutPixel(x, y, z, t.texture->GetPixel((int)u, (int)v), t.light);
                 }
             }
             else {
@@ -633,7 +179,7 @@ private:
                     z += dZdX;
                     u += dUdX;
                     v += dVdX;
-                    putPixel(x, y, z, t.texture->getColor((int)u, (int)v), t.light);
+                    PutPixel(x, y, z, t.texture->GetPixel((int)u, (int)v), t.light);
                 }
 
             }
@@ -662,9 +208,9 @@ private:
             zp = (t.V2.z + prestep * dZdY32);
             up = (t.V2.u + prestep * dUdY32);
             vp = (t.V2.v + prestep * dVdY32);
-            if ((t.texture->width > 0) && (t.texture->height > 0)) {
-                up *= (t.texture->width - 1);
-                vp *= (t.texture->height - 1);
+            if ((u_width > 0) && (v_height > 0)) {
+                up *= (u_width - 1);
+                vp *= (v_height - 1);
             }
         }
 
@@ -678,7 +224,7 @@ private:
                 z += dZdX;
                 u += dUdX;
                 v += dVdX;
-                putPixel(x, y, z, t.texture->getColor((int)u, (int)v), t.light);
+                PutPixel(x, y, z, t.texture->GetPixel((int)u, (int)v), t.light);
             }
             x_left += dXdY32;
             x_right += dXdY31;
@@ -695,41 +241,15 @@ private:
 public:
     bool OnUserCreate() override
     {
-        leftTexture.loadFromBitmap("negx.bmp");
-        topTexture.loadFromBitmap("posy.bmp");
-        rightTexture.loadFromBitmap("posx.bmp");
-        bottomTexture.loadFromBitmap("negy.bmp");
-        frontTexture.loadFromBitmap("negz.bmp");
-        backTexture.loadFromBitmap("posz.bmp");
-
-        mesh.LoadFromObjectFile("test.obj");
-
-        //mesh.triangles = {
-
-        //    // FRONT
-        //    { { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f },  &frontTexture },
-        //    { { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f },    { 1.0f, 0.0f, 0.0f, 1.0f, 1.0f },  &frontTexture },
-
-        //    // RIGHT
-        //    { { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 0.0f, 0.0f, 0.0f },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f },  &rightTexture },
-        //    { { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f },    { 1.0f, 0.0f, 1.0f, 1.0f, 1.0f },  &rightTexture },
-
-        //    // BACK
-        //    { { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 1.0f, 0.0f, 0.0f },    { 0.0f, 1.0f, 1.0f, 1.0f, 0.0f },  &backTexture },
-        //    { { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 1.0f, 1.0f, 0.0f },    { 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },  &backTexture },
-
-        //    // LEFT
-        //    { { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f },  &leftTexture },
-        //    { { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f },    { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f },  &leftTexture },
-
-        //    // TOP
-        //    { { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f },  &topTexture },
-        //    { { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f },    { 1.0f, 1.0f, 0.0f, 1.0f, 1.0f },  &topTexture },
-
-        //    // BOTTOM
-        //    { { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },    { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f },  &bottomTexture },
-        //    { { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f },    { 1.0f, 0.0f, 0.0f, 1.0f, 1.0f },  &bottomTexture },
-        //};
+        frontTexture.LoadFromBitmap("negz.bmp");
+        mesh.LoadFromObjectFile("test.obj", &frontTexture, 1.0);
+        //mesh.MakeQube(nullptr, 1.0);
+        //frontTexture.LoadFromBitmap("negz.bmp");   mesh.triangles[0].SetTexture(&frontTexture);   mesh.triangles[1].SetTexture(&frontTexture);      // front
+        //rightTexture.LoadFromBitmap("posx.bmp");   mesh.triangles[2].SetTexture(&rightTexture);   mesh.triangles[3].SetTexture(&rightTexture);      // right
+        //backTexture.LoadFromBitmap("posz.bmp");    mesh.triangles[4].SetTexture(&backTexture);    mesh.triangles[5].SetTexture(&backTexture);       // back
+        //leftTexture.LoadFromBitmap("negx.bmp");    mesh.triangles[6].SetTexture(&leftTexture);    mesh.triangles[7].SetTexture(&leftTexture);       // left
+        //topTexture.LoadFromBitmap("posy.bmp");     mesh.triangles[8].SetTexture(&topTexture);     mesh.triangles[9].SetTexture(&topTexture);        // top
+        //bottomTexture.LoadFromBitmap("negy.bmp");  mesh.triangles[10].SetTexture(&bottomTexture); mesh.triangles[11].SetTexture(&bottomTexture);    // bottom
 
         // Projection matrix
         float fScale = 1.0f;
@@ -745,44 +265,36 @@ public:
         matProj.m[2][3] = 1.0f;
         matProj.m[3][3] = 0.0f;
 
-
         return true;
     }
 
     bool OnUserUpdate(float fElapsedTime) override
     {
-        std::chrono::milliseconds elapsedMs;
         vector<TTriangle> vTrianglesToRaster;
         TMat4x4 matRotX, matRotZ, matRotZX;                                 // Set up rotation matrices
 
         Clear(BLACK);
-        clrZBuffer();                                                       // Clear Screen and Z buffer
-
+        ClrZBuffer();                                                       // Clear Screen and Z buffer
         fTheta += 1.0f * fElapsedTime;
 
         get_timepoint();
-
-        matRotZ.m[0][0] = cosf(fTheta);                                     // Rotation Z
-        matRotZ.m[0][1] = sinf(fTheta);
-        matRotZ.m[1][0] = -sinf(fTheta);
-        matRotZ.m[1][1] = cosf(fTheta);
-        matRotZ.m[2][2] = 1;
-        matRotZ.m[3][3] = 1;
-
-        matRotX.m[0][0] = 1;                                                // Rotation X
-        matRotX.m[1][1] = cosf(fTheta * 0.5f);
-        matRotX.m[1][2] = sinf(fTheta * 0.5f);
-        matRotX.m[2][1] = -sinf(fTheta * 0.5f);
-        matRotX.m[2][2] = cosf(fTheta * 0.5f);
-        matRotX.m[3][3] = 1;
-
-        MultiplyMatrixByMatrix(matRotZX, matRotZ, matRotX);                 // Rotation in Z-Axis and X-Axis
-
+            matRotZ.m[0][0] = cosf(fTheta);                                 // Rotation Z
+            matRotZ.m[0][1] = sinf(fTheta);
+            matRotZ.m[1][0] = -sinf(fTheta);
+            matRotZ.m[1][1] = cosf(fTheta);
+            matRotZ.m[2][2] = 1;
+            matRotZ.m[3][3] = 1;
+            matRotX.m[0][0] = 1;                                            // Rotation X
+            matRotX.m[1][1] = cosf(fTheta * 0.5f);
+            matRotX.m[1][2] = sinf(fTheta * 0.5f);
+            matRotX.m[2][1] = -sinf(fTheta * 0.5f);
+            matRotX.m[2][2] = cosf(fTheta * 0.5f);
+            matRotX.m[3][3] = 1;
+            MultiplyMatrixByMatrix(matRotZX, matRotZ, matRotX);             // Rotation in Z-Axis and X-Axis
         print_diff_timepoint("Rotation time     : ");
 
         get_timepoint();
-
-        for (auto tri : mesh.triangles)                                     // Draw Triangles
+        for (auto tri : mesh.triangles) 
         {
             TVec3d normal;
             TTriangle triProjected, triTranslated, triRotatedZX;
@@ -793,27 +305,25 @@ public:
             MultiplyMatrixVector(tri.V2, triRotatedZX.V2, matRotZX);
             MultiplyMatrixVector(tri.V3, triRotatedZX.V3, matRotZX);
 
-            // Offset into the screen
             triTranslated = triRotatedZX;
-            triTranslated.V1.z = triRotatedZX.V1.z + 8.0f;
-            triTranslated.V2.z = triRotatedZX.V2.z + 8.0f;
-            triTranslated.V3.z = triRotatedZX.V3.z + 8.0f;
+            triTranslated.V1.y += 3.0f;                                     // Offset into the screen
+            triTranslated.V2.y += 3.0f;
+            triTranslated.V3.y += 3.0f;
+            triTranslated.V1.z += 8.0f;                                     // Offset into the screen
+            triTranslated.V2.z += 8.0f;
+            triTranslated.V3.z += 8.0f;
 
             normal = triTranslated.NormalVector();
-
             if (normal.x * (triTranslated.V1.x - vCamera.x) +
                 normal.y * (triTranslated.V1.y - vCamera.y) +
                 normal.z * (triTranslated.V1.z - vCamera.z) < 0.0)
             {
-                // Illumination
-                TVec3d light_direction = { 0.0f, 0.0f, -1.0f };
+                TVec3d light_direction = { 0.0f, 0.0f, -1.0f };             // Illumination
 
                 float inv_sqrt_ll = q_rsqrt(light_direction.x * light_direction.x + light_direction.y * light_direction.y + light_direction.z * light_direction.z);
-
                 light_direction.x *= inv_sqrt_ll;
                 light_direction.y *= inv_sqrt_ll;
                 light_direction.z *= inv_sqrt_ll;
-
                 float dp = normal.x * light_direction.x + normal.y * light_direction.y + normal.z * light_direction.z;
 
                 // Project triangles from 3D --> 2D
@@ -824,35 +334,34 @@ public:
                 triProjected.light = dp;
                 triProjected.Translate(1.0f, 1.0f, 0.0f);
                 triProjected.Scale(0.5f * (float)ScreenWidth(), 0.5f * (float)ScreenHeight(), 0.5f * fFar);
-
                 vTrianglesToRaster.push_back(triProjected);
             }
-
         }
         print_diff_timepoint("Matrix projection : ");
 
         // sort triangles from back to front
         get_timepoint();
-        sort(vTrianglesToRaster.begin(), vTrianglesToRaster.end(), [](TTriangle& t1, TTriangle t2) {
-            float z1 = (t1.V1.z + t1.V2.z + t1.V3.z) / 3.0f;
-            float z2 = (t2.V1.z + t2.V2.z + t2.V3.z) / 3.0f;
-            return z1 > z2;
-            });
+            sort(vTrianglesToRaster.begin(), vTrianglesToRaster.end(), [](TTriangle& t1, TTriangle t2) {
+                float z1 = (t1.V1.z + t1.V2.z + t1.V3.z) / 3.0f;
+                float z2 = (t2.V1.z + t2.V2.z + t2.V3.z) / 3.0f;
+                return z1 > z2;
+                });
         print_diff_timepoint("Sorting time      : ");
 
-        get_timepoint();
-        for (auto triProjected : vTrianglesToRaster)                        // Draw Triangles sorted
-        {
-            fillTriangle(triProjected, WHITE * triProjected.light);         // Rasterize triangle
-            //fillTriangleT(triProjected);
-        }
-        print_diff_timepoint("Rendering time 1  : ");
+        //get_timepoint();
+        //for (auto triProjected : vTrianglesToRaster)                        // Draw Triangles sorted
+        //{
+        //    fillTriangle(triProjected, WHITE * triProjected.light);         // Rasterize triangle
+        //    //fillTriangleT(triProjected);
+        //}
+        //print_diff_timepoint("Rendering time 1  : ");
 
         get_timepoint();
-        for (auto triProjected : vTrianglesToRaster)                        // Draw Triangles sorted
+        for (const auto &triProjected : vTrianglesToRaster)                 // Draw Triangles sorted
         {
-            //fillTriangle(triProjected, WHITE * triProjected.light);         // Rasterize triangle
-            fillTriangleT(triProjected);
+            //fillTriangle(triProjected, WHITE * triProjected.light);       // Rasterize triangle
+            //fillTriangleT(triProjected);
+            DrawTriangle(triProjected);
         }
         print_diff_timepoint("Rendering time 2  : ");
 
@@ -861,7 +370,11 @@ public:
     }
 };
 
-int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR CmdLine, int nShowCmd)
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+
+int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR CmdLine, _In_opt_ int nShowCmd)
 {
     Engine3D demo;
 
