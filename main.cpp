@@ -276,6 +276,7 @@ public:
         Clear(BLACK);
         ClrZBuffer();                                                       // Clear Screen and Z buffer
         fTheta += 1.0f * fElapsedTime;
+        //fTheta += 0.1f * fElapsedTime;
 
         get_timepoint();
             matRotZ.m[0][0] = cosf(fTheta);                                 // Rotation Z
@@ -306,9 +307,9 @@ public:
             MultiplyMatrixVector(tri.V3, triRotatedZX.V3, matRotZX);
 
             triTranslated = triRotatedZX;
-            triTranslated.V1.y += 3.0f;                                     // Offset into the screen
-            triTranslated.V2.y += 3.0f;
-            triTranslated.V3.y += 3.0f;
+            triTranslated.V1.x += 3.0f;                                     // Offset into the screen
+            triTranslated.V2.x += 3.0f;
+            triTranslated.V3.x += 3.0f;
             triTranslated.V1.z += 8.0f;                                     // Offset into the screen
             triTranslated.V2.z += 8.0f;
             triTranslated.V3.z += 8.0f;

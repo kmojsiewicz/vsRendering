@@ -733,37 +733,45 @@ void CEngine::DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p, 
     auto rol = [&](void) { pattern = (pattern << 1) | (pattern >> 31); return pattern & 1; };
 
     Pixel* pixels = GetDrawTarget()->GetData();
-    int x, y, xe, ye, xi, yi;
-    int D;
-    int dx;
-    int dy;
+    int x, y, xi, xe, ye;
+    int screenx, screeny;
+    int D21;
+    int dx21, dx21tmp;
+    int dy21, dy21tmp;
 
-    dx = (x2 > x1) ? (x2 - x1) : (x1 - x2);
-    dy = (y2 > y1) ? (y2 - y1) : (y1 - y2);
+    screenx = ScreenWidth();
+    screeny = ScreenHeight();
 
-    if (dx == 0) {                                                      // Line is vertical
+    if (y1 > y2) {                                                      // sorting point by their Y values
+        std::swap(x1, x2);
+        std::swap(y1, y2);
+    }
+
+    dx21 = (x2 > x1) ? (x2 - x1) : (x1 - x2);
+    dy21 = (y2 - y1);                                                   // dy21 will always be positive 
+
+    if (dx21 == 0) {                                                    // Line is vertical
         if (x1 < 0) return;
-        if (x1 >= ScreenWidth()) return;
-        if (y2 < y1) std::swap(y1, y2);
+        if (x1 >= screenx) return;
         if (y1 < 0) y1 = 0;
-        if (y2 >= ScreenHeight()) y2 = ScreenHeight() - 1;
-        int offset = y1 * ScreenWidth() + x1;
+        if (y2 >= screeny) y2 = screeny - 1;
+        int offset = y1 * screenx + x1;
         for (y = y1; y <= y2; y++) {
             if (rol()) {
                 pixels[offset] = p;
             }
-            offset += ScreenWidth();
+            offset += screenx;
         }
         return;
     }
 
-    if (dy == 0) {                                                      // Line is horizontal
+    if (dy21 == 0) {                                                    // Line is horizontal
         if (y1 < 0) return;
-        if (y1 >= ScreenHeight()) return;
+        if (y1 >= screeny) return;
         if (x2 < x1) std::swap(x1, x2);
         if (x1 < 0) x1 = 0;
-        if (x2 >= ScreenWidth()) x2 = ScreenWidth() - 1;
-        int offset = y1 * ScreenWidth() + x1;
+        if (x2 >= screenx) x2 = screenx - 1;
+        int offset = y1 * screenx + x1;
         for (x = x1; x <= x2; x++) {
             if (rol()) {
                 pixels[offset] = p;
@@ -773,64 +781,62 @@ void CEngine::DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p, 
         return;
     }
 
-    if (dy < dx) {
-        if (x1 < x2) {
-            x = x1; y = y1; xe = x2; dy = y2 - y1;
-        }
-        else {
-            x = x2; y = y2; xe = x1; dy = y1 - y2;
-        }
-        if (xe >= ScreenWidth()) xe = ScreenWidth() - 1;
-        if (dy < 0) {
-            yi = -1; dy = -dy;
-            if (y < 0) return;
-        }
-        else {
-            yi = 1;
-            if (y >= ScreenHeight()) return;
-        }
-        D = 2 * dy - dx;
-        for (; x <= xe; x++) {
-            if ((x >= 0) && (y >= 0) && (y < ScreenHeight()) && rol()) {
-                pixels[x + y * ScreenWidth()] = p;
+    x = x1;
+    y = y1;
+    xe = x2;
+    ye = y2;
+
+    if (y2 < 0) return;                                                 // line off screen
+    if (y1 >= screeny) return;                                          // line off screen
+    if (x1 <= x2) {
+        if (x2 < 0) return;                                             // line off screen
+        if (x1 >= screenx) return;                                      // line off screen
+        xi = 1;
+        if (xe >= screenx) xe = screenx - 1;
+    }
+    else {
+        if (x1 < 0) return;                                             // line off screen
+        if (x2 >= screenx) return;                                      // line off screen
+        xi = -1;
+        if (xe < 0) xe = 0;
+    }
+    if (ye >= screeny) ye = screeny - 1;
+
+    dx21tmp = dx21;
+    dy21tmp = dy21;
+    dx21 += dx21;                                                       // dx21 = 2 * dx21
+    dy21 += dy21;                                                       // dy21 = 2 * dy21
+
+    if (dy21 < dx21) {
+        D21 = dy21 - dx21tmp;                                           // D21 = 2 * dy21 - dx21;
+        for (; dx21tmp; dx21tmp--) {
+            if ((x >= 0) && (y >= 0) && (x < screenx) && (y < screeny) && rol()) {
+                pixels[x + y * screenx] = p;
             }
-            if (D > 0) {
-                y += yi;
-                if (yi == 1) { if (y >= ScreenHeight()) return; }
-                else         { if (y < 0) return; }
-                D -= 2 * dx;
+            if (x == xe) return;
+            x += xi;
+            if (D21 > 0) {
+                if (y == ye) return;
+                y++;
+                D21 -= dx21;
             }
-            D += 2 * dy;
+            D21 += dy21;
         }
     }
     else {
-        if (y1 < y2) {
-            x = x1; y = y1; ye = y2; dx = x2 - x1;
-        }
-        else {
-            x = x2; y = y2; ye = y1; dx = x1 - x2;
-        }
-        if (ye >= ScreenHeight()) ye = ScreenHeight() - 1;
-        if (dx < 0) {
-            xi = -1; dx = -dx;
-            if (x < 0) return;
-        }
-        else {
-            xi = 1;
-            if (x >= ScreenWidth()) return;
-        }
-        D = 2 * dx - dy;
-        for (; y <= ye; y++) {
-            if ((x >= 0) && (y >= 0) && (x < ScreenWidth()) && rol()) {
-                pixels[x + y * ScreenWidth()] = p;
+        D21 = dx21 - dy21tmp;                                           // D21 = 2 * dx21 - dy21;
+        for (; dy21tmp; dy21tmp--) {
+            if ((x >= 0) && (y >= 0) && (x < screenx) && (y < screeny) && rol()) {
+                pixels[x + y * screenx] = p;
             }
-            if (D > 0) {
+            if (y == ye) return;
+            y++;
+            if (D21 > 0) {
+                if (x == xe) return;
                 x += xi;
-                if (xi == 1) { if (x >= ScreenWidth()) return; }
-                else         { if (x < 0) return; }
-                D -= 2 * dy;
+                D21 -= dy21;
             }
-            D += 2 * dx;
+            D21 += dx21;
         }
     }
 }
