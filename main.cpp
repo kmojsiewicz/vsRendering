@@ -242,6 +242,11 @@ public:
     bool OnUserCreate() override
     {
         frontTexture.LoadFromBitmap("negz.bmp");
+        //mesh.triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { -1.0f, 2.0f, 0.0f, 0.0f, 0.0f },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f }, &frontTexture, 1.0 });
+
+        //mesh.triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f }, &frontTexture, 1.0 });
+        //mesh.triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f },    { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f }, &frontTexture, 1.0 });
+
         mesh.LoadFromObjectFile("test.obj", &frontTexture, 1.0);
         //mesh.MakeQube(nullptr, 1.0);
         //frontTexture.LoadFromBitmap("negz.bmp");   mesh.triangles[0].SetTexture(&frontTexture);   mesh.triangles[1].SetTexture(&frontTexture);      // front
@@ -360,8 +365,8 @@ public:
         get_timepoint();
         for (const auto &triProjected : vTrianglesToRaster)                 // Draw Triangles sorted
         {
-            //fillTriangle(triProjected, WHITE * triProjected.light);       // Rasterize triangle
-            //fillTriangleT(triProjected);
+            FillTriangle(triProjected, BLUE);// *triProjected.light);       // Rasterize triangle
+            //FillTriangleT(triProjected);
             DrawTriangle(triProjected);
         }
         print_diff_timepoint("Rendering time 2  : ");
