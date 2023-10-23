@@ -498,6 +498,7 @@ struct TVertex {
     float z;
     float u;
     float v;
+    Pixel p;
 };
 
 struct TTriangle {
@@ -711,13 +712,11 @@ inline void CEngine::PutPixel(int x, int y, float z, Pixel p, float light)
     if (y < 0) y = 0;
     if (y > (WND_HEIGHT - 1)) y = WND_HEIGHT - 1;
 
-    //Pixel p(col.R * light, col.G * light, col.B * light);
-    //Pixel p((uint8_t)(255.0 * light), (uint8_t)(255.0 * light), (uint8_t)(255.0 * light));
     CLayer* pDrawTarget = GetDrawTarget();
 
     //if (z_buffer[x][y] > z) {
     //    z_buffer[x][y] = z;
-    pDrawTarget->SetPixel(x, y, p);
+    pDrawTarget->SetPixel(x, y, p * light);
     //}
 }
 
@@ -787,123 +786,166 @@ void CEngine::DrawTriangle(TTriangle t)
 
 void CEngine::FillTriangle(TTriangle t, Pixel p)
 {
+    struct intVertex {
+        int x, y;
+        int r, g, b;
+    } v1, v2, v3;
+
+    v1.x = (int)t.V1.x; v1.y = (int)t.V1.y; v1.r = (int)t.V1.p.r; v1.g = (int)t.V1.p.g; v1.b = (int)t.V1.p.b;
+    v2.x = (int)t.V2.x; v2.y = (int)t.V2.y; v2.r = (int)t.V2.p.r; v2.g = (int)t.V2.p.g; v2.b = (int)t.V2.p.b;
+    v3.x = (int)t.V3.x; v3.y = (int)t.V3.y; v3.r = (int)t.V3.p.r; v3.g = (int)t.V3.p.g; v3.b = (int)t.V3.p.b;
+    
+    if (v1.y > v2.y) {                                                      // sort the vertices (v1,v2,v3) by their Y values
+        std::swap(v1, v2);
+    }
+    if (v1.y > v3.y) {
+        std::swap(v1, v3);
+    }
+    if (v2.y > v3.y) {
+        std::swap(v2, v3);
+    }
+
     Pixel* pixels = GetDrawTarget()->GetData();
     int screenx = ScreenWidth();
     int screeny = ScreenHeight();
 
-    auto drawline = [&](int sx, int ex, int ny) {
+    int ix21 = (v1.x <= v2.x) ? 1 : -1;
+    int ix31 = (v1.x <= v3.x) ? 1 : -1;
+    int ix32 = (v2.x <= v3.x) ? 1 : -1;
+    int dx21 = (v1.x <= v2.x) ? (v2.x - v1.x) : (v1.x - v2.x);
+    int dx31 = (v1.x <= v3.x) ? (v3.x - v1.x) : (v1.x - v3.x);
+    int dx32 = (v2.x <= v3.x) ? (v3.x - v2.x) : (v2.x - v3.x);
+    int dy21 = -(v2.y - v1.y);                                              // dy21 will always be negative 
+    int dy31 = -(v3.y - v1.y);                                              // dy31 will always be negative 
+    int dy32 = -(v3.y - v2.y);                                              // dy31 will always be negative 
+
+    int dRdX_fract = ((v1.r - v3.r) * dy21 + (v2.r - v1.r) * dy31);
+    int dGdX_fract = ((v1.g - v3.g) * dy21 + (v2.g - v1.g) * dy31);
+    int dBdX_fract = ((v1.b - v3.b) * dy21 + (v2.b - v1.b) * dy31);
+    int dX_denom   = ((v1.x - v3.x) * dy21 + (v2.x - v1.x) * dy31);
+    
+    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _dy_denom) {
+
         if (ny < 0) return;
         if (ny >= screeny) return;
-        if (sx > ex) std::swap(sx, ex);
+        if (sx > ex) {
+            std::swap(sx, ex);
+        }
         if (sx < 0) sx = 0;
         if (ex >= screenx) ex = screenx - 1;
+        if (_dy_denom == 0) _dy_denom = 1;
+        int red   = _r * dX_denom / _dy_denom;
+        int green = _g * dX_denom / _dy_denom;
+        int blue  = _b * dX_denom / _dy_denom;
         int offset = ny * screenx + sx;
-        for (int i = sx; i <= ex; i++) {
-            pixels[offset++] = p;
+        for (int i = sx; i < ex; i++) {
+            pixels[offset++] = Pixel(red / dX_denom, green / dX_denom, blue / dX_denom, 255);
+            red += dRdX_fract;
+            green += dGdX_fract;
+            blue += dBdX_fract;
         }
     };
 
-    int x1, y1, x2, y2, x3, y3;
-    x1 = (int)t.V1.x;
-    y1 = (int)t.V1.y;
-    x2 = (int)t.V2.x;
-    y2 = (int)t.V2.y;
-    x3 = (int)t.V3.x;
-    y3 = (int)t.V3.y;
+    int eA = dx21 + dy21;
+    int eB = dx31 + dy31;
+    int neA, neB;                                                           // next error
+    int xA = v1.x;
+    int xB = v1.x;
+    int y = v1.y;
 
-    if (y1 > y2) {                                                          // sort the vertices (V1,V2,V3) by their Y values
-        std::swap(x1, x2);
-        std::swap(y1, y2);
+    int dR_fract = (v1.r - v2.r);
+    int dG_fract = (v1.g - v2.g);
+    int dB_fract = (v1.b - v2.b);
+    int dY_denom = dy21;
+    if (((v1.x - v2.x) * dy31) > ((v1.x - v3.x) * dy21)) {                  // V2 on the right side
+        dR_fract = (v1.r - v3.r);
+        dG_fract = (v1.g - v3.g);
+        dB_fract = (v1.b - v3.b);
+        dY_denom = dy31;
     }
-    if (y1 > y3) {
-        std::swap(x1, x3);
-        std::swap(y1, y3);
-    }
-    if (y2 > y3) {
-        std::swap(x2, x3);
-        std::swap(y2, y3);
-    }
-
-    int dx21 = (x2 > x1) ? (x2 - x1) : (x1 - x2);
-    int dx31 = (x3 > x1) ? (x3 - x1) : (x1 - x3);
-    int dx32 = (x3 > x2) ? (x3 - x2) : (x2 - x3);
-    int dy21 = -(y2 - y1);                                                  // dy21 will always be negative 
-    int dy31 = -(y3 - y1);                                                  // dy31 will always be negative 
-    int dy32 = -(y3 - y2);                                                  // dy31 will always be negative 
-    int ix21 = (x1 <= x2) ? 1 : -1;
-    int ix31 = (x1 <= x3) ? 1 : -1;
-    int ix32 = (x2 <= x3) ? 1 : -1;
-    int e21 = dx21 + dy21;
-    int e31 = dx31 + dy31;
-    int e32 = dx32 + dy32;
-    int ne21, ne31, ne32;
-    int xa = x1;
-    int xb = x1;
-    int y = y1;
+    int r = v1.r * dY_denom;
+    int g = v1.g * dY_denom;
+    int b = v1.b * dY_denom;
 
     while (1) {
-        if ((xa == x2) && (y == y2)) break;
-        ne21 = 2 * e21;
-        if (ne21 >= dy21) {
-            e21 += dy21;
-            if (xa == x2) break;
-            xa += ix21;
+        if ((xA == v2.x) && (y == v2.y))  break;
+        neA = 2 * eA;
+        if (neA >= dy21) {
+            eA += dy21;
+            if (xA == v2.x) break;
+            xA += ix21;
         }
-        if (ne21 <= dx21) {
-            e21 += dx21;
-            
+        if (neA <= dx21) {
+            eA += dx21;
+
             while (1) {
-                ne31 = 2 * e31;
-                if (ne31 >= dy31) {
-                    e31 += dy31;
-                    if (xb == x3) break;
-                    xb += ix31;
+                neB = 2 * eB;
+                if (neB >= dy31) {
+                    eB += dy31;
+                    if (xB == v3.x) break;
+                    xB += ix31;
                 }
-                if (ne31 <= dx31) {
-                    e31 += dx31;
+                if (neB <= dx31) {
+                    eB += dx31;
                     break;
                 }
             }
 
-            drawline(xa, xb, y);                                            // Draw line from min to max points found on the y
-
-            if (y == y2) break;
+            if (y == v2.y) break;
             y++;
+            r += dR_fract;
+            g += dG_fract;
+            b += dB_fract;
+            drawline(xA, xB, y, r, g, b, dY_denom);
+            
             if (y == screeny) return;
         }
     }
 
+    if (dY_denom == dy21) {                                                             
+        dR_fract = (v2.r - v3.r);
+        dG_fract = (v2.g - v3.g);
+        dB_fract = (v2.b - v3.b);
+        dY_denom = dy32;
+        r = v2.r * dY_denom;
+        g = v2.g * dY_denom;
+        b = v2.b * dY_denom;
+    }
+    eA = dx32 + dy32;
+    eB = dx31 + dy31;
+
     while (1) {
-        if ((xb >= 0) && (y >= 0) && (xb < screenx) && (y < screeny)) {
-            pixels[xb + y * screenx] = p;
+        if ((xB == v3.x) && (y == v3.y)) break;
+        neB = 2 * eB;
+        if (neB >= dy31) {
+            eB += dy31;
+            if (xB == v3.x) break;
+            xB += ix31;
         }
-        if ((xb == x3) && (y == y3)) break;
-        ne31 = 2 * e31;
-        if (ne31 >= dy31) {
-            e31 += dy31;
-            if (xb == x3) break;
-            xb += ix31;
-        }
-        if (ne31 <= dx31) {
-            e31 += dx31;
+        if (neB <= dx31) {
+            eB += dx31;
 
             while (1) {
-                ne32 = 2 * e32;
-                if (ne32 >= dy32) {
-                    e32 += dy32;
-                    if (xa == x3) break;
-                    xa += ix32;
+                neA = 2 * eA;
+                if (neA >= dy32) {
+                    eA += dy32;
+                    if (xA == v3.x) break;
+                    xA += ix32;
                 }
-                if (ne32 <= dx32) {
-                    e32 += dx32;
+                if (neA <= dx32) {
+                    eA += dx32;
                     break;
                 }
             }
 
-            drawline(xa, xb, y);                                            // Draw line from min to max points found on the y
-
-            if (y == y3) break;
+            drawline(xA, xB, y, r, g, b, dY_denom);                         // Draw line from min to max points found on the y
+            
+            if (y == v3.y) break;
             y++;
+            r += dR_fract;
+            g += dG_fract;
+            b += dB_fract;
+            
             if (y == screeny) break;
         }
     }

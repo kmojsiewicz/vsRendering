@@ -242,12 +242,16 @@ public:
     bool OnUserCreate() override
     {
         frontTexture.LoadFromBitmap("negz.bmp");
-        //mesh.triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { -1.0f, 2.0f, 0.0f, 0.0f, 0.0f },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f }, &frontTexture, 1.0 });
+        mesh.triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 2.0f, 6.0f, 0.0f, 0.0f, 0.0f },    { 3.0f, 3.0f, 0.0f, 1.0f, 0.0f }, &frontTexture, 1.0 });
+        mesh.triangles[0].V1.p = RED;
+        mesh.triangles[0].V2.p = GREEN;
+        mesh.triangles[0].V3.p = BLUE;
+
 
         //mesh.triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f }, &frontTexture, 1.0 });
         //mesh.triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f },    { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f }, &frontTexture, 1.0 });
 
-        mesh.LoadFromObjectFile("test.obj", &frontTexture, 1.0);
+        //mesh.LoadFromObjectFile("test.obj", &frontTexture, 1.0);
         //mesh.MakeQube(nullptr, 1.0);
         //frontTexture.LoadFromBitmap("negz.bmp");   mesh.triangles[0].SetTexture(&frontTexture);   mesh.triangles[1].SetTexture(&frontTexture);      // front
         //rightTexture.LoadFromBitmap("posx.bmp");   mesh.triangles[2].SetTexture(&rightTexture);   mesh.triangles[3].SetTexture(&rightTexture);      // right
@@ -270,6 +274,8 @@ public:
         matProj.m[2][3] = 1.0f;
         matProj.m[3][3] = 0.0f;
 
+        fTheta = 4.95;
+
         return true;
     }
 
@@ -282,6 +288,8 @@ public:
         ClrZBuffer();                                                       // Clear Screen and Z buffer
         fTheta += 1.0f * fElapsedTime;
         //fTheta += 0.1f * fElapsedTime;
+        //fTheta = 5.024;
+        cout << fTheta << endl;
 
         get_timepoint();
             matRotZ.m[0][0] = cosf(fTheta);                                 // Rotation Z
@@ -312,18 +320,18 @@ public:
             MultiplyMatrixVector(tri.V3, triRotatedZX.V3, matRotZX);
 
             triTranslated = triRotatedZX;
-            triTranslated.V1.x += 3.0f;                                     // Offset into the screen
-            triTranslated.V2.x += 3.0f;
-            triTranslated.V3.x += 3.0f;
+            triTranslated.V1.x += 0.0f;                                     // Offset into the screen
+            triTranslated.V2.x += 0.0f;
+            triTranslated.V3.x += 0.0f;
             triTranslated.V1.z += 8.0f;                                     // Offset into the screen
             triTranslated.V2.z += 8.0f;
             triTranslated.V3.z += 8.0f;
 
             normal = triTranslated.NormalVector();
-            if (normal.x * (triTranslated.V1.x - vCamera.x) +
-                normal.y * (triTranslated.V1.y - vCamera.y) +
-                normal.z * (triTranslated.V1.z - vCamera.z) < 0.0)
-            {
+            //if (normal.x * (triTranslated.V1.x - vCamera.x) +
+            //    normal.y * (triTranslated.V1.y - vCamera.y) +
+            //    normal.z * (triTranslated.V1.z - vCamera.z) < 0.0)
+            //{
                 TVec3d light_direction = { 0.0f, 0.0f, -1.0f };             // Illumination
 
                 float inv_sqrt_ll = q_rsqrt(light_direction.x * light_direction.x + light_direction.y * light_direction.y + light_direction.z * light_direction.z);
@@ -341,7 +349,7 @@ public:
                 triProjected.Translate(1.0f, 1.0f, 0.0f);
                 triProjected.Scale(0.5f * (float)ScreenWidth(), 0.5f * (float)ScreenHeight(), 0.5f * fFar);
                 vTrianglesToRaster.push_back(triProjected);
-            }
+            //}
         }
         print_diff_timepoint("Matrix projection : ");
 
@@ -370,6 +378,8 @@ public:
             DrawTriangle(triProjected);
         }
         print_diff_timepoint("Rendering time 2  : ");
+
+        //DrawLine(100, 100, 500, 100, BLUE);
 
         printDurTimeOnce = false;
         return true;

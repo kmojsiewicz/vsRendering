@@ -27,7 +27,7 @@ Krzysztof Mojsiewicz
 
 ## Version History
 
-* 1.0.0.5
+* 1.0.0.6
     * Initial Release
 
 ## License
