@@ -798,12 +798,16 @@ void CEngine::FillTriangle(TTriangle t)
     v1.x = (int)t.V1.x; v1.y = (int)t.V1.y; 
     v2.x = (int)t.V2.x; v2.y = (int)t.V2.y; 
     v3.x = (int)t.V3.x; v3.y = (int)t.V3.y; 
-    v1.r = (int)(t.V1.p.r * t.light); v1.g = (int)(t.V1.p.g * t.light); v1.b = (int)(t.V1.p.b * t.light);
-    v2.r = (int)(t.V2.p.r * t.light); v2.g = (int)(t.V2.p.g * t.light); v2.b = (int)(t.V2.p.b * t.light);
-    v3.r = (int)(t.V3.p.r * t.light); v3.g = (int)(t.V3.p.g * t.light); v3.b = (int)(t.V3.p.b * t.light);
-    v1.u = (int)(t.V1.u * t.texture->GetWidth()); v1.v = (int)(t.V1.v * t.texture->GetHeight());
-    v2.u = (int)(t.V2.u * t.texture->GetWidth()); v2.v = (int)(t.V2.v * t.texture->GetHeight());
-    v3.u = (int)(t.V3.u * t.texture->GetWidth()); v3.v = (int)(t.V3.v * t.texture->GetHeight());
+    if (t.texture == NULL) {
+        v1.r = (int)(t.V1.p.r * t.light); v1.g = (int)(t.V1.p.g * t.light); v1.b = (int)(t.V1.p.b * t.light);
+        v2.r = (int)(t.V2.p.r * t.light); v2.g = (int)(t.V2.p.g * t.light); v2.b = (int)(t.V2.p.b * t.light);
+        v3.r = (int)(t.V3.p.r * t.light); v3.g = (int)(t.V3.p.g * t.light); v3.b = (int)(t.V3.p.b * t.light);
+    }
+    else {
+        v1.u = (int)(t.V1.u * t.texture->GetWidth()); v1.v = (int)(t.V1.v * t.texture->GetHeight());
+        v2.u = (int)(t.V2.u * t.texture->GetWidth()); v2.v = (int)(t.V2.v * t.texture->GetHeight());
+        v3.u = (int)(t.V3.u * t.texture->GetWidth()); v3.v = (int)(t.V3.v * t.texture->GetHeight());
+    }
     
     if (v1.y > v2.y) {                                                      // sort the vertices (v1,v2,v3) by their Y values
         std::swap(v1, v2);
@@ -829,11 +833,16 @@ void CEngine::FillTriangle(TTriangle t)
     int dy31 = -(v3.y - v1.y);                                              // dy31 will always be negative 
     int dy32 = -(v3.y - v2.y);                                              // dy31 will always be negative 
 
-    int dRdX_fract = ((v1.r - v3.r) * dy21 + (v2.r - v1.r) * dy31);
-    int dGdX_fract = ((v1.g - v3.g) * dy21 + (v2.g - v1.g) * dy31);
-    int dBdX_fract = ((v1.b - v3.b) * dy21 + (v2.b - v1.b) * dy31);
-    int dUdX_fract = ((v1.u - v3.u) * dy21 + (v2.u - v1.u) * dy31);
-    int dVdX_fract = ((v1.v - v3.v) * dy21 + (v2.v - v1.v) * dy31);
+    int dRdX_fract, dGdX_fract, dBdX_fract, dUdX_fract, dVdX_fract;
+    if (t.texture == NULL) {
+        dRdX_fract = ((v1.r - v3.r) * dy21 + (v2.r - v1.r) * dy31);
+        dGdX_fract = ((v1.g - v3.g) * dy21 + (v2.g - v1.g) * dy31);
+        dBdX_fract = ((v1.b - v3.b) * dy21 + (v2.b - v1.b) * dy31);
+    }
+    else {
+        dUdX_fract = ((v1.u - v3.u) * dy21 + (v2.u - v1.u) * dy31);
+        dVdX_fract = ((v1.v - v3.v) * dy21 + (v2.v - v1.v) * dy31);
+    }
     int dX_denom   = ((v1.x - v3.x) * dy21 + (v2.x - v1.x) * dy31);
 
     auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _u, int _v, int _dy_denom) {
@@ -848,21 +857,28 @@ void CEngine::FillTriangle(TTriangle t)
         if (_dy_denom == 0) _dy_denom = 1;
         if (dX_denom == 0) dX_denom = 1;
         int dXdY_denom = dX_denom / _dy_denom;
-        int red   = _r * dXdY_denom;
-        int green = _g * dXdY_denom;
-        int blue  = _b * dXdY_denom;
-        int upos = _u * dXdY_denom;
-        int vpos = _v * dXdY_denom;
-        int offset = ny * screenx + sx;
-        for (int i = sx; i < ex; i++) {
-            red += dRdX_fract;
-            green += dGdX_fract;
-            blue += dBdX_fract;
-            upos += dUdX_fract;
-            vpos += dVdX_fract;
 
-            pixels[offset++] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom);
-            //pixels[offset++] = Pixel(red / dX_denom, green / dX_denom, blue / dX_denom, 255);
+        if (t.texture == NULL) {
+            int red = _r * dXdY_denom;
+            int green = _g * dXdY_denom;
+            int blue = _b * dXdY_denom;
+            int offset = ny * screenx + sx;
+            for (int i = sx; i < ex; i++) {
+                red += dRdX_fract;
+                green += dGdX_fract;
+                blue += dBdX_fract;
+                pixels[offset++] = Pixel(red / dX_denom, green / dX_denom, blue / dX_denom, 255);
+            }
+        }
+        else {
+            int upos = _u * dXdY_denom;
+            int vpos = _v * dXdY_denom;
+            int offset = ny * screenx + sx;
+            for (int i = sx; i < ex; i++) {
+                upos += dUdX_fract;
+                vpos += dVdX_fract;
+                pixels[offset++] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom);
+            }
         }
     };
 
@@ -873,25 +889,40 @@ void CEngine::FillTriangle(TTriangle t)
     int xB = v1.x;
     int y = v1.y;
 
-    int dR_fract = (v2.r - v1.r);
-    int dG_fract = (v2.g - v1.g);
-    int dB_fract = (v2.b - v1.b);
-    int dU_fract = (v2.u - v1.u);
-    int dV_fract = (v2.v - v1.v);
+    int r = 0, g = 0, b = 0, u = 0, v = 0;
+    int dR_fract = 0, dG_fract = 0, dB_fract = 0, dU_fract = 0, dV_fract = 0;
     int dY_denom = (v2.y - v1.y);
+
+    if (t.texture == NULL) {
+        dR_fract = (v2.r - v1.r);
+        dG_fract = (v2.g - v1.g);
+        dB_fract = (v2.b - v1.b);
+    }
+    else {
+        dU_fract = (v2.u - v1.u);
+        dV_fract = (v2.v - v1.v);
+    }
     if (((v1.x - v2.x) * dy31) > ((v1.x - v3.x) * dy21)) {                  // V2 on the right side
-        dR_fract = (v3.r - v1.r);
-        dG_fract = (v3.g - v1.g);
-        dB_fract = (v3.b - v1.b);
-        dU_fract = (v3.u - v1.u);
-        dV_fract = (v3.v - v1.v);
+        if (t.texture == NULL) {
+            dR_fract = (v3.r - v1.r);
+            dG_fract = (v3.g - v1.g);
+            dB_fract = (v3.b - v1.b);
+        }
+        else {
+            dU_fract = (v3.u - v1.u);
+            dV_fract = (v3.v - v1.v);
+        }
         dY_denom = (v3.y - v1.y);
     }
-    int r = v1.r * dY_denom;
-    int g = v1.g * dY_denom;
-    int b = v1.b * dY_denom;
-    int u = v1.u * dY_denom;
-    int v = v1.v * dY_denom;
+    if (t.texture == NULL) {
+        r = v1.r * dY_denom;
+        g = v1.g * dY_denom;
+        b = v1.b * dY_denom;
+    }
+    else {
+        u = v1.u * dY_denom;
+        v = v1.v * dY_denom;
+    }
 
     while (1) {
         if ((xA == v2.x) && (y == v2.y))  break;
@@ -931,17 +962,21 @@ void CEngine::FillTriangle(TTriangle t)
     }
 
     if (dY_denom == (v2.y - v1.y)) {
-        dR_fract = (v3.r - v2.r);
-        dG_fract = (v3.g - v2.g);
-        dB_fract = (v3.b - v2.b);
-        dU_fract = (v3.u - v2.u);
-        dV_fract = (v3.v - v2.v);
         dY_denom = (v3.y - v2.y);
-        r = v2.r * dY_denom;
-        g = v2.g * dY_denom;
-        b = v2.b * dY_denom;
-        u = v2.u * dY_denom;
-        v = v2.v * dY_denom;
+        if (t.texture == NULL) {
+            dR_fract = (v3.r - v2.r);
+            dG_fract = (v3.g - v2.g);
+            dB_fract = (v3.b - v2.b);
+            r = v2.r * dY_denom;
+            g = v2.g * dY_denom;
+            b = v2.b * dY_denom;
+        }
+        else {
+            dU_fract = (v3.u - v2.u);
+            dV_fract = (v3.v - v2.v);
+            u = v2.u * dY_denom;
+            v = v2.v * dY_denom;
+        }
     }
     eA = dx32 + dy32;
     eB = dx31 + dy31;
