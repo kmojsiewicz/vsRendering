@@ -34,7 +34,7 @@ public:
     bool Draw(int32_t x, int32_t y, Pixel p);
     void DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p = WHITE, uint32_t pattern = 0xFFFFFFFF);
     void DrawTriangle(TTriangle t);
-    void FillTriangle(TTriangle t, Pixel p);
+    void FillTriangle(TTriangle t);
 };
 
 //---------------------------------------------------------------------------
@@ -561,30 +561,30 @@ struct TMesh
 {
     std::vector<TTriangle> triangles;
 
-    void MakeQube(CTexture* texture, float light) 
+    void MakeQube(CTexture* texture, Pixel defPixel, float light) 
     {
         triangles.clear();
         // FRONT
-        triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f }, texture, light });
-        triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f },    { 1.0f, 0.0f, 0.0f, 1.0f, 1.0f }, texture, light });
+        triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, defPixel },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, defPixel },    { 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, defPixel }, texture, light });
         // RIGHT
-        triangles.push_back({ { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 0.0f, 0.0f, 0.0f },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f }, texture, light });
-        triangles.push_back({ { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f },    { 1.0f, 0.0f, 1.0f, 1.0f, 1.0f }, texture, light });
+        triangles.push_back({ { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, defPixel },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel },    { 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, defPixel }, texture, light });
         // BACK
-        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 1.0f, 0.0f, 0.0f },    { 0.0f, 1.0f, 1.0f, 1.0f, 0.0f }, texture, light });
-        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 1.0f, 1.0f, 0.0f },    { 0.0f, 0.0f, 1.0f, 1.0f, 1.0f }, texture, light });
+        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, defPixel },    { 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel },    { 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, defPixel }, texture, light });
         // LEFT
-        triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f }, texture, light });
-        triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f },    { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f }, texture, light });
+        triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, defPixel },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, defPixel },    { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, defPixel }, texture, light });
         // TOP
-        triangles.push_back({ { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f }, texture, light });
-        triangles.push_back({ { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f },    { 1.0f, 1.0f, 0.0f, 1.0f, 1.0f }, texture, light });
+        triangles.push_back({ { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f , defPixel},    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel },    { 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, defPixel }, texture, light });
         // BOTTOM
-        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },    { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f }, texture, light });
-        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f },    { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f },    { 1.0f, 0.0f, 0.0f, 1.0f, 1.0f }, texture, light });
+        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, defPixel },    { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, defPixel },    { 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, defPixel }, texture, light });
     }
 
-    bool LoadFromObjectFile(std::string sfilename, CTexture *texture, float light) {
+    bool LoadFromObjectFile(std::string sfilename, CTexture *texture, Pixel defPixel, float light) {
 
         std::vector<TVertex> verts;
         std::string line, key;
@@ -678,6 +678,9 @@ struct TMesh
                                     }
                                 }
                             }
+                            verts[v[0] - 1].p = defPixel;
+                            verts[v[1] - 1].p = defPixel;
+                            verts[v[2] - 1].p = defPixel;
                             triangles.push_back({ verts[v[0] - 1], verts[v[1] - 1], verts[v[2] - 1], texture , light });
                         }
                     }
@@ -784,16 +787,23 @@ void CEngine::DrawTriangle(TTriangle t)
     DrawLine((int32_t)t.V1.x, (int32_t)t.V1.y, (int32_t)t.V3.x, (int32_t)t.V3.y);
 }
 
-void CEngine::FillTriangle(TTriangle t, Pixel p)
+void CEngine::FillTriangle(TTriangle t)
 {
     struct intVertex {
         int x, y;
         int r, g, b;
+        int u, v;
     } v1, v2, v3;
 
-    v1.x = (int)t.V1.x; v1.y = (int)t.V1.y; v1.r = (int)t.V1.p.r; v1.g = (int)t.V1.p.g; v1.b = (int)t.V1.p.b;
-    v2.x = (int)t.V2.x; v2.y = (int)t.V2.y; v2.r = (int)t.V2.p.r; v2.g = (int)t.V2.p.g; v2.b = (int)t.V2.p.b;
-    v3.x = (int)t.V3.x; v3.y = (int)t.V3.y; v3.r = (int)t.V3.p.r; v3.g = (int)t.V3.p.g; v3.b = (int)t.V3.p.b;
+    v1.x = (int)t.V1.x; v1.y = (int)t.V1.y; 
+    v2.x = (int)t.V2.x; v2.y = (int)t.V2.y; 
+    v3.x = (int)t.V3.x; v3.y = (int)t.V3.y; 
+    v1.r = (int)(t.V1.p.r * t.light); v1.g = (int)(t.V1.p.g * t.light); v1.b = (int)(t.V1.p.b * t.light);
+    v2.r = (int)(t.V2.p.r * t.light); v2.g = (int)(t.V2.p.g * t.light); v2.b = (int)(t.V2.p.b * t.light);
+    v3.r = (int)(t.V3.p.r * t.light); v3.g = (int)(t.V3.p.g * t.light); v3.b = (int)(t.V3.p.b * t.light);
+    v1.u = (int)(t.V1.u * t.texture->GetWidth()); v1.v = (int)(t.V1.v * t.texture->GetHeight());
+    v2.u = (int)(t.V2.u * t.texture->GetWidth()); v2.v = (int)(t.V2.v * t.texture->GetHeight());
+    v3.u = (int)(t.V3.u * t.texture->GetWidth()); v3.v = (int)(t.V3.v * t.texture->GetHeight());
     
     if (v1.y > v2.y) {                                                      // sort the vertices (v1,v2,v3) by their Y values
         std::swap(v1, v2);
@@ -822,9 +832,11 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
     int dRdX_fract = ((v1.r - v3.r) * dy21 + (v2.r - v1.r) * dy31);
     int dGdX_fract = ((v1.g - v3.g) * dy21 + (v2.g - v1.g) * dy31);
     int dBdX_fract = ((v1.b - v3.b) * dy21 + (v2.b - v1.b) * dy31);
+    int dUdX_fract = ((v1.u - v3.u) * dy21 + (v2.u - v1.u) * dy31);
+    int dVdX_fract = ((v1.v - v3.v) * dy21 + (v2.v - v1.v) * dy31);
     int dX_denom   = ((v1.x - v3.x) * dy21 + (v2.x - v1.x) * dy31);
 
-    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _dy_denom) {
+    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _u, int _v, int _dy_denom) {
 
         if (ny < 0) return;
         if (ny >= screeny) return;
@@ -834,16 +846,23 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
         if (sx < 0) sx = 0;
         if (ex >= screenx) ex = screenx - 1;
         if (_dy_denom == 0) _dy_denom = 1;
+        if (dX_denom == 0) dX_denom = 1;
         int dXdY_denom = dX_denom / _dy_denom;
         int red   = _r * dXdY_denom;
         int green = _g * dXdY_denom;
         int blue  = _b * dXdY_denom;
+        int upos = _u * dXdY_denom;
+        int vpos = _v * dXdY_denom;
         int offset = ny * screenx + sx;
         for (int i = sx; i < ex; i++) {
             red += dRdX_fract;
             green += dGdX_fract;
             blue += dBdX_fract;
-            pixels[offset++] = Pixel(red / dX_denom, green / dX_denom, blue / dX_denom, 255);
+            upos += dUdX_fract;
+            vpos += dVdX_fract;
+
+            pixels[offset++] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom);
+            //pixels[offset++] = Pixel(red / dX_denom, green / dX_denom, blue / dX_denom, 255);
         }
     };
 
@@ -857,16 +876,22 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
     int dR_fract = (v2.r - v1.r);
     int dG_fract = (v2.g - v1.g);
     int dB_fract = (v2.b - v1.b);
+    int dU_fract = (v2.u - v1.u);
+    int dV_fract = (v2.v - v1.v);
     int dY_denom = (v2.y - v1.y);
     if (((v1.x - v2.x) * dy31) > ((v1.x - v3.x) * dy21)) {                  // V2 on the right side
         dR_fract = (v3.r - v1.r);
         dG_fract = (v3.g - v1.g);
         dB_fract = (v3.b - v1.b);
+        dU_fract = (v3.u - v1.u);
+        dV_fract = (v3.v - v1.v);
         dY_denom = (v3.y - v1.y);
     }
     int r = v1.r * dY_denom;
     int g = v1.g * dY_denom;
     int b = v1.b * dY_denom;
+    int u = v1.u * dY_denom;
+    int v = v1.v * dY_denom;
 
     while (1) {
         if ((xA == v2.x) && (y == v2.y))  break;
@@ -897,7 +922,9 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
             r += dR_fract;
             g += dG_fract;
             b += dB_fract;
-            drawline(xA, xB, y, r, g, b, dY_denom);
+            u += dU_fract;
+            v += dV_fract;
+            drawline(xA, xB, y, r, g, b, u, v, dY_denom);
             
             if (y == screeny) return;
         }
@@ -907,10 +934,14 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
         dR_fract = (v3.r - v2.r);
         dG_fract = (v3.g - v2.g);
         dB_fract = (v3.b - v2.b);
+        dU_fract = (v3.u - v2.u);
+        dV_fract = (v3.v - v2.v);
         dY_denom = (v3.y - v2.y);
         r = v2.r * dY_denom;
         g = v2.g * dY_denom;
         b = v2.b * dY_denom;
+        u = v2.u * dY_denom;
+        v = v2.v * dY_denom;
     }
     eA = dx32 + dy32;
     eB = dx31 + dy31;
@@ -939,14 +970,15 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
                 }
             }
 
-            drawline(xA, xB, y, r, g, b, dY_denom);                         // Draw line from min to max points found on the y
+            drawline(xA, xB, y, r, g, b, u, v, dY_denom);                     // Draw line from min to max points found on the y
             
             if (y == v3.y) break;
             y++;
             r += dR_fract;
             g += dG_fract;
             b += dB_fract;
-            
+            u += dU_fract;
+            v += dV_fract;
             if (y == screeny) break;
         }
     }
