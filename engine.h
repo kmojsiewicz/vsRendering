@@ -823,7 +823,7 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
     int dGdX_fract = ((v1.g - v3.g) * dy21 + (v2.g - v1.g) * dy31);
     int dBdX_fract = ((v1.b - v3.b) * dy21 + (v2.b - v1.b) * dy31);
     int dX_denom   = ((v1.x - v3.x) * dy21 + (v2.x - v1.x) * dy31);
-    
+
     auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _dy_denom) {
 
         if (ny < 0) return;
@@ -834,15 +834,16 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
         if (sx < 0) sx = 0;
         if (ex >= screenx) ex = screenx - 1;
         if (_dy_denom == 0) _dy_denom = 1;
-        int red   = _r * dX_denom / _dy_denom;
-        int green = _g * dX_denom / _dy_denom;
-        int blue  = _b * dX_denom / _dy_denom;
+        int dXdY_denom = dX_denom / _dy_denom;
+        int red   = _r * dXdY_denom;
+        int green = _g * dXdY_denom;
+        int blue  = _b * dXdY_denom;
         int offset = ny * screenx + sx;
         for (int i = sx; i < ex; i++) {
-            pixels[offset++] = Pixel(red / dX_denom, green / dX_denom, blue / dX_denom, 255);
             red += dRdX_fract;
             green += dGdX_fract;
             blue += dBdX_fract;
+            pixels[offset++] = Pixel(red / dX_denom, green / dX_denom, blue / dX_denom, 255);
         }
     };
 
@@ -853,15 +854,15 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
     int xB = v1.x;
     int y = v1.y;
 
-    int dR_fract = (v1.r - v2.r);
-    int dG_fract = (v1.g - v2.g);
-    int dB_fract = (v1.b - v2.b);
-    int dY_denom = dy21;
+    int dR_fract = (v2.r - v1.r);
+    int dG_fract = (v2.g - v1.g);
+    int dB_fract = (v2.b - v1.b);
+    int dY_denom = (v2.y - v1.y);
     if (((v1.x - v2.x) * dy31) > ((v1.x - v3.x) * dy21)) {                  // V2 on the right side
-        dR_fract = (v1.r - v3.r);
-        dG_fract = (v1.g - v3.g);
-        dB_fract = (v1.b - v3.b);
-        dY_denom = dy31;
+        dR_fract = (v3.r - v1.r);
+        dG_fract = (v3.g - v1.g);
+        dB_fract = (v3.b - v1.b);
+        dY_denom = (v3.y - v1.y);
     }
     int r = v1.r * dY_denom;
     int g = v1.g * dY_denom;
@@ -902,11 +903,11 @@ void CEngine::FillTriangle(TTriangle t, Pixel p)
         }
     }
 
-    if (dY_denom == dy21) {                                                             
-        dR_fract = (v2.r - v3.r);
-        dG_fract = (v2.g - v3.g);
-        dB_fract = (v2.b - v3.b);
-        dY_denom = dy32;
+    if (dY_denom == (v2.y - v1.y)) {
+        dR_fract = (v3.r - v2.r);
+        dG_fract = (v3.g - v2.g);
+        dB_fract = (v3.b - v2.b);
+        dY_denom = (v3.y - v2.y);
         r = v2.r * dY_denom;
         g = v2.g * dY_denom;
         b = v2.b * dY_denom;

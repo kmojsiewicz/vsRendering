@@ -288,8 +288,8 @@ public:
         ClrZBuffer();                                                       // Clear Screen and Z buffer
         fTheta += 1.0f * fElapsedTime;
         //fTheta += 0.1f * fElapsedTime;
-        //fTheta = 5.024;
-        cout << fTheta << endl;
+        //fTheta = 6.96;
+        //cout << fTheta << endl;
 
         get_timepoint();
             matRotZ.m[0][0] = cosf(fTheta);                                 // Rotation Z
