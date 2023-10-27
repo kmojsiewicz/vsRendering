@@ -877,7 +877,7 @@ void CEngine::FillTriangle(TTriangle t)
             for (int i = sx; i < ex; i++) {
                 upos += dUdX_fract;
                 vpos += dVdX_fract;
-                pixels[offset++] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom);
+                pixels[offset++] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom) * t.light;
             }
         }
     };
