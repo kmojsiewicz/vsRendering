@@ -70,14 +70,14 @@ private:
 public:
     bool OnUserCreate() override
     {
-        //mesh.LoadFromObjectFile("test.obj", nullptr, WHITE, 1.0);
-        mesh.MakeQube(nullptr, WHITE, 1.0);
-        frontTexture.LoadFromBitmap("negz.bmp");   mesh.triangles[0].SetTexture(&frontTexture);   mesh.triangles[1].SetTexture(&frontTexture);      // front
-        rightTexture.LoadFromBitmap("posx.bmp");   mesh.triangles[2].SetTexture(&rightTexture);   mesh.triangles[3].SetTexture(&rightTexture);      // right
-        backTexture.LoadFromBitmap("posz.bmp");    mesh.triangles[4].SetTexture(&backTexture);    mesh.triangles[5].SetTexture(&backTexture);       // back
-        leftTexture.LoadFromBitmap("negx.bmp");    mesh.triangles[6].SetTexture(&leftTexture);    mesh.triangles[7].SetTexture(&leftTexture);       // left
-        topTexture.LoadFromBitmap("posy.bmp");     mesh.triangles[8].SetTexture(&topTexture);     mesh.triangles[9].SetTexture(&topTexture);        // top
-        bottomTexture.LoadFromBitmap("negy.bmp");  mesh.triangles[10].SetTexture(&bottomTexture); mesh.triangles[11].SetTexture(&bottomTexture);    // bottom
+        mesh.LoadFromObjectFile("test.obj", nullptr, WHITE, 1.0);
+        //mesh.MakeQube(nullptr, WHITE, 1.0);
+        //frontTexture.LoadFromBitmap("negz.bmp");   mesh.triangles[0].SetTexture(&frontTexture);   mesh.triangles[1].SetTexture(&frontTexture);      // front
+        //rightTexture.LoadFromBitmap("posx.bmp");   mesh.triangles[2].SetTexture(&rightTexture);   mesh.triangles[3].SetTexture(&rightTexture);      // right
+        //backTexture.LoadFromBitmap("posz.bmp");    mesh.triangles[4].SetTexture(&backTexture);    mesh.triangles[5].SetTexture(&backTexture);       // back
+        //leftTexture.LoadFromBitmap("negx.bmp");    mesh.triangles[6].SetTexture(&leftTexture);    mesh.triangles[7].SetTexture(&leftTexture);       // left
+        //topTexture.LoadFromBitmap("posy.bmp");     mesh.triangles[8].SetTexture(&topTexture);     mesh.triangles[9].SetTexture(&topTexture);        // top
+        //bottomTexture.LoadFromBitmap("negy.bmp");  mesh.triangles[10].SetTexture(&bottomTexture); mesh.triangles[11].SetTexture(&bottomTexture);    // bottom
 
         float fScale = 1.0f;
         float fNear = 0.1f;
@@ -100,7 +100,7 @@ public:
         vector<TTriangle> vTrianglesToRaster;
         TMat4x4 matRotX, matRotZ, matRotZX;                                 // Set up rotation matrices
 
-        Clear(DARK_GREY);
+        Clear(BLACK);
         ClrZBuffer();                                                       // Clear Screen and Z buffer
         fTheta += 1.0f * fElapsedTime;
 
@@ -135,9 +135,9 @@ public:
             triTranslated.V1.x += 0.0f;                                     // Offset into the screen
             triTranslated.V2.x += 0.0f;
             triTranslated.V3.x += 0.0f;
-            triTranslated.V1.z += 2.0f;                                     // Offset into the screen
-            triTranslated.V2.z += 2.0f;
-            triTranslated.V3.z += 2.0f;
+            triTranslated.V1.z += 8.0f;                                     // Offset into the screen
+            triTranslated.V2.z += 8.0f;
+            triTranslated.V3.z += 8.0f;
 
             normal = triTranslated.NormalVector();
             if (normal.x * (triTranslated.V1.x - vCamera.x) +

@@ -867,12 +867,8 @@ void CEngine::FillTriangle(TTriangle t)
 
         if (ny < 0) return;
         if (ny >= screeny) return;
-        if (sx > ex) {
-            std::swap(sx, ex);
-        }
         if (sx < 0) sx = 0;
         if (ex >= screenx) ex = screenx - 1;
-        if (_dy_denom == 0) _dy_denom = 1;
         if (dX_denom == 0) dX_denom = 1;
 
         if (t.texture == NULL) {
@@ -901,6 +897,7 @@ void CEngine::FillTriangle(TTriangle t)
 
     bool changed1, changed2;
     int eA, eB, eAp, eBp;
+    int minx, maxx;
     int xA = v1.x;
     int xB = v1.x;
     int y = v1.y;
@@ -930,6 +927,7 @@ void CEngine::FillTriangle(TTriangle t)
         }
         dY_denom = dy31;
     }
+    if (dY_denom == 0) dY_denom++;
 
     if (t.texture == NULL) {
         r = v1.r * dY_denom;                                                // (v1.r - 4 * dRdX_fract / dX_denom) * dY_denom;
@@ -947,16 +945,19 @@ void CEngine::FillTriangle(TTriangle t)
     else { changed2 = false; }
 
     eB = (int)(dx31 >> 1);
-    if (v1.y != v2.y) {
+    if (v1.y != v2.y) {                                                     // Flat top, just process the second half
         eA = (int)(dx21 >> 1);
 
-        for (int i = 0; i <= dx21;) {
+        for (int i = 0; i < dx21;) {
             eAp = 0;
             eBp = 0;
+            if (xA < xB) { minx = xA; maxx = xB; }
+            else { minx = xB; maxx = xA; }
 
             eA += dy21;
             if (changed1) {
-                if (++i <= dx21) {
+                if (i < dx21) {
+                    i++;
                     while (eA >= dx21) {
                         eA -= dx21;
                         eAp = ix21;
@@ -964,12 +965,15 @@ void CEngine::FillTriangle(TTriangle t)
                 }
             }
             else {
-                while ((++i <= dx21) && (eA < dx21)) {
-                    xA += ix21; 
+                while ((i < dx21) && (eA < dx21)) {
+                    xA += ix21;
                     eA += dy21;
+                    i++;
                 }
                 eA -= dx21;
                 eAp += ix21;
+                if (minx > xA) minx = xA;
+                if (maxx < xA) maxx = xA;
             }
 
             eB += dy31;                                                     // process second line until y value is about to change
@@ -977,7 +981,7 @@ void CEngine::FillTriangle(TTriangle t)
                 while (eB >= dx31) {
                     eB -= dx31;
                     eBp = ix31;
-                } 
+                }
             }
             else {
                 while (eB < dx31) {
@@ -986,9 +990,11 @@ void CEngine::FillTriangle(TTriangle t)
                 }
                 eB -= dx31;
                 eBp += ix31;
+                if (minx > xB) minx = xB;
+                if (maxx < xB) maxx = xB;
             }
 
-            drawline(xA, xB, y, r, g, b, u, v, dY_denom);
+            drawline(minx, maxx, y, r, g, b, u, v, dY_denom);
             xA += eAp;
             xB += eBp;
             y++;                                                            // Now increase y
@@ -997,13 +1003,14 @@ void CEngine::FillTriangle(TTriangle t)
             b += dB_fract;
             u += dU_fract;
             v += dV_fract;
-            if (y > v2.y) break;
+            if (y == v2.y) break;
             if (y == screeny) return;
         }
     }
 
     if (dY_denom == (v2.y - v1.y)) {
         dY_denom = dy32;
+        if (dY_denom == 0) dY_denom++;
         if (t.texture == NULL) {
             dR_fract = (v3.r - v2.r);
             dG_fract = (v3.g - v2.g);
@@ -1026,13 +1033,15 @@ void CEngine::FillTriangle(TTriangle t)
     eA = (int)(dx32 >> 1);
     xA = v2.x;
 
-    for (int i = 0; i <= dx32;) {
+    for (int i = 0; i <= dx32; i++) {
         eAp = 0;
         eBp = 0;
+        if (xA < xB) { minx = xA; maxx = xB; }
+        else { minx = xB; maxx = xA; }
 
         eA += dy32;
         if (changed1) {
-            if (++i <= dx32) {
+            if (i < dx32) {
                 if (eA >= dx32) {
                     eA -= dx32;
                     eAp = ix32;
@@ -1040,12 +1049,15 @@ void CEngine::FillTriangle(TTriangle t)
             }
         }
         else {
-            while ((++i <= dx32) && (eA < dx32)) {
-                xA += ix32;
+            while ((i < dx32) && (eA < dx32)) {
                 eA += dy32;
+                xA += ix32;
+                i++;
             }
             eA -= dx32;
             eAp += ix32;
+            if (minx > xA) minx = xA;
+            if (maxx < xA) maxx = xA;
         }
 
         if (changed2) {
@@ -1067,9 +1079,11 @@ void CEngine::FillTriangle(TTriangle t)
                 }
             }
             eBp += ix31;
+            if (minx > xB) minx = xB;
+            if (maxx < xB) maxx = xB;
         }
 
-        drawline(xA, xB, y, r, g, b, u, v, dY_denom);
+        drawline(minx, maxx, y, r, g, b, u, v, dY_denom);
         xA += eAp;
         xB += eBp;
         y++;                                                                // Now increase y
@@ -1081,6 +1095,7 @@ void CEngine::FillTriangle(TTriangle t)
         if (y > v3.y) break;
         if (y == screeny) return;
     }
+
 }
 
 //---------------------------------------------------------------------------
