@@ -138,6 +138,14 @@ public:
             return Pixel(0, 0, 0, 0);
     }
 
+    Pixel GetPixel(int32_t offset) const
+    {
+        if (offset >= 0 && offset < pColData.size())
+            return pColData[offset];
+        else
+            return Pixel(0, 0, 0, 0);
+    }
+
     bool SetPixel(int32_t x, int32_t y, Pixel p) 
     {
         if (x >= 0 && x < width && y >= 0 && y < height) {
@@ -795,9 +803,6 @@ void CEngine::FillTriangle(TTriangle t)
         int u, v;
     } v1, v2, v3;
 
-    v1.x = (int)t.V1.x; v1.y = (int)t.V1.y; 
-    v2.x = (int)t.V2.x; v2.y = (int)t.V2.y; 
-    v3.x = (int)t.V3.x; v3.y = (int)t.V3.y; 
     if (t.texture == NULL) {
         v1.r = (int)(t.V1.p.r * t.light); v1.g = (int)(t.V1.p.g * t.light); v1.b = (int)(t.V1.p.b * t.light);
         v2.r = (int)(t.V2.p.r * t.light); v2.g = (int)(t.V2.p.g * t.light); v2.b = (int)(t.V2.p.b * t.light);
@@ -808,7 +813,14 @@ void CEngine::FillTriangle(TTriangle t)
         v2.u = (int)(t.V2.u * t.texture->GetWidth()); v2.v = (int)(t.V2.v * t.texture->GetHeight());
         v3.u = (int)(t.V3.u * t.texture->GetWidth()); v3.v = (int)(t.V3.v * t.texture->GetHeight());
     }
-    
+
+    v1.x = (int)(t.V1.x);
+    v2.x = (int)(t.V2.x);
+    v3.x = (int)(t.V3.x);
+    v1.y = (int)(t.V1.y);
+    v2.y = (int)(t.V2.y);
+    v3.y = (int)(t.V3.y);
+
     if (v1.y > v2.y) {                                                      // sort the vertices (v1,v2,v3) by their Y values
         std::swap(v1, v2);
     }
@@ -829,23 +841,29 @@ void CEngine::FillTriangle(TTriangle t)
     int dx21 = (v1.x <= v2.x) ? (v2.x - v1.x) : (v1.x - v2.x);
     int dx31 = (v1.x <= v3.x) ? (v3.x - v1.x) : (v1.x - v3.x);
     int dx32 = (v2.x <= v3.x) ? (v3.x - v2.x) : (v2.x - v3.x);
-    int dy21 = -(v2.y - v1.y);                                              // dy21 will always be negative 
-    int dy31 = -(v3.y - v1.y);                                              // dy31 will always be negative 
-    int dy32 = -(v3.y - v2.y);                                              // dy31 will always be negative 
+    int dy21 = (v2.y - v1.y);                                              // dy21 will always be positive 
+    int dy31 = (v3.y - v1.y);                                              // dy31 will always be positive 
+    int dy32 = (v3.y - v2.y);                                              // dy32 will always be positive 
 
     int dRdX_fract, dGdX_fract, dBdX_fract, dUdX_fract, dVdX_fract;
     if (t.texture == NULL) {
-        dRdX_fract = ((v1.r - v3.r) * dy21 + (v2.r - v1.r) * dy31);
-        dGdX_fract = ((v1.g - v3.g) * dy21 + (v2.g - v1.g) * dy31);
-        dBdX_fract = ((v1.b - v3.b) * dy21 + (v2.b - v1.b) * dy31);
+        dRdX_fract = ((v3.r - v1.r) * dy21 + (v1.r - v2.r) * dy31);
+        dGdX_fract = ((v3.g - v1.g) * dy21 + (v1.g - v2.g) * dy31);
+        dBdX_fract = ((v3.b - v1.b) * dy21 + (v1.b - v2.b) * dy31);
     }
     else {
-        dUdX_fract = ((v1.u - v3.u) * dy21 + (v2.u - v1.u) * dy31);
-        dVdX_fract = ((v1.v - v3.v) * dy21 + (v2.v - v1.v) * dy31);
+        dUdX_fract = ((v3.u - v1.u) * dy21 + (v1.u - v2.u) * dy31);
+        dVdX_fract = ((v3.v - v1.v) * dy21 + (v1.v - v2.v) * dy31);
     }
-    int dX_denom   = ((v1.x - v3.x) * dy21 + (v2.x - v1.x) * dy31);
+    int dX_denom   = ((v3.x - v1.x) * dy21 + (v1.x - v2.x) * dy31);
 
     auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _u, int _v, int _dy_denom) {
+
+        auto clipcolor = [](int c) {
+            if (c < 0) return 0;
+            if (c > 255) return 255;
+            return c;
+        };
 
         if (ny < 0) return;
         if (ny >= screeny) return;
@@ -856,53 +874,51 @@ void CEngine::FillTriangle(TTriangle t)
         if (ex >= screenx) ex = screenx - 1;
         if (_dy_denom == 0) _dy_denom = 1;
         if (dX_denom == 0) dX_denom = 1;
-        int dXdY_denom = dX_denom / _dy_denom;
 
         if (t.texture == NULL) {
-            int red = _r * dXdY_denom;
-            int green = _g * dXdY_denom;
-            int blue = _b * dXdY_denom;
+            int red   = (_r / _dy_denom) * dX_denom;
+            int green = (_g / _dy_denom) * dX_denom;
+            int blue  = (_b / _dy_denom) * dX_denom;
             int offset = ny * screenx + sx;
-            for (int i = sx; i < ex; i++) {
+            for (int i = sx; i <= ex; i++) {
+                pixels[offset++] = Pixel(clipcolor(red / dX_denom), clipcolor(green / dX_denom), clipcolor(blue / dX_denom), 255);
                 red += dRdX_fract;
                 green += dGdX_fract;
                 blue += dBdX_fract;
-                pixels[offset++] = Pixel(red / dX_denom, green / dX_denom, blue / dX_denom, 255);
             }
         }
         else {
-            int upos = _u * dXdY_denom;
-            int vpos = _v * dXdY_denom;
+            int upos = (_u / _dy_denom) * dX_denom;
+            int vpos = (_v / _dy_denom) * dX_denom;
             int offset = ny * screenx + sx;
-            for (int i = sx; i < ex; i++) {
+            for (int i = sx; i <= ex; i++) {
+                pixels[offset++] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom) * t.light;
                 upos += dUdX_fract;
                 vpos += dVdX_fract;
-                pixels[offset++] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom) * t.light;
             }
         }
     };
 
-    int eA = dx21 + dy21;
-    int eB = dx31 + dy31;
-    int neA, neB;                                                           // next error
+    bool changed1, changed2;
+    int eA, eB, eAp, eBp;
     int xA = v1.x;
     int xB = v1.x;
     int y = v1.y;
 
     int r = 0, g = 0, b = 0, u = 0, v = 0;
     int dR_fract = 0, dG_fract = 0, dB_fract = 0, dU_fract = 0, dV_fract = 0;
-    int dY_denom = (v2.y - v1.y);
+    int dY_denom = dy21;
 
     if (t.texture == NULL) {
-        dR_fract = (v2.r - v1.r);
-        dG_fract = (v2.g - v1.g);
-        dB_fract = (v2.b - v1.b);
+        dR_fract = (v2.r - v1.r);                                           // dR_fract = v2.r - v1.r + 4 * dRdX_fract / dX_denom;
+        dG_fract = (v2.g - v1.g);                                           // dG_fract = v2.g - v1.g + 4 * dGdX_fract / dX_denom;
+        dB_fract = (v2.b - v1.b);                                           // dB_fract = v2.b - v1.b + 4 * dBdX_fract / dX_denom;
     }
     else {
         dU_fract = (v2.u - v1.u);
         dV_fract = (v2.v - v1.v);
     }
-    if (((v1.x - v2.x) * dy31) > ((v1.x - v3.x) * dy21)) {                  // V2 on the right side
+    if (((v2.x - v1.x) * dy31) > ((v3.x - v1.x) * dy21)) {                  // V2 on the right side
         if (t.texture == NULL) {
             dR_fract = (v3.r - v1.r);
             dG_fract = (v3.g - v1.g);
@@ -912,57 +928,82 @@ void CEngine::FillTriangle(TTriangle t)
             dU_fract = (v3.u - v1.u);
             dV_fract = (v3.v - v1.v);
         }
-        dY_denom = (v3.y - v1.y);
+        dY_denom = dy31;
     }
+
     if (t.texture == NULL) {
-        r = v1.r * dY_denom;
-        g = v1.g * dY_denom;
-        b = v1.b * dY_denom;
+        r = v1.r * dY_denom;                                                // (v1.r - 4 * dRdX_fract / dX_denom) * dY_denom;
+        g = v1.g * dY_denom;                                                // (v1.g - 4 * dGdX_fract / dX_denom) * dY_denom;
+        b = v1.b * dY_denom;                                                // (v1.b - 4 * dBdX_fract / dX_denom) * dY_denom;
     }
     else {
         u = v1.u * dY_denom;
         v = v1.v * dY_denom;
     }
 
-    while (1) {
-        if ((xA == v2.x) && (y == v2.y))  break;
-        neA = 2 * eA;
-        if (neA >= dy21) {
-            eA += dy21;
-            if (xA == v2.x) break;
-            xA += ix21;
-        }
-        if (neA <= dx21) {
-            eA += dx21;
+    if (dy21 > dx21) { std::swap(dx21, dy21); changed1 = true; }
+    else { changed1 = false; }
+    if (dy31 > dx31) { std::swap(dy31, dx31); changed2 = true; }
+    else { changed2 = false; }
 
-            while (1) {
-                neB = 2 * eB;
-                if (neB >= dy31) {
-                    eB += dy31;
-                    if (xB == v3.x) break;
-                    xB += ix31;
-                }
-                if (neB <= dx31) {
-                    eB += dx31;
-                    break;
+    eB = (int)(dx31 >> 1);
+    if (v1.y != v2.y) {
+        eA = (int)(dx21 >> 1);
+
+        for (int i = 0; i <= dx21;) {
+            eAp = 0;
+            eBp = 0;
+
+            eA += dy21;
+            if (changed1) {
+                if (++i <= dx21) {
+                    while (eA >= dx21) {
+                        eA -= dx21;
+                        eAp = ix21;
+                    }
                 }
             }
+            else {
+                while ((++i <= dx21) && (eA < dx21)) {
+                    xA += ix21; 
+                    eA += dy21;
+                }
+                eA -= dx21;
+                eAp += ix21;
+            }
 
-            if (y == v2.y) break;
-            y++;
+            eB += dy31;                                                     // process second line until y value is about to change
+            if (changed2) {
+                while (eB >= dx31) {
+                    eB -= dx31;
+                    eBp = ix31;
+                } 
+            }
+            else {
+                while (eB < dx31) {
+                    xB += ix31;
+                    eB += dy31;
+                }
+                eB -= dx31;
+                eBp += ix31;
+            }
+
+            drawline(xA, xB, y, r, g, b, u, v, dY_denom);
+            xA += eAp;
+            xB += eBp;
+            y++;                                                            // Now increase y
             r += dR_fract;
             g += dG_fract;
             b += dB_fract;
             u += dU_fract;
             v += dV_fract;
-            drawline(xA, xB, y, r, g, b, u, v, dY_denom);
-            
+            if (y > v2.y) break;
             if (y == screeny) return;
         }
     }
 
     if (dY_denom == (v2.y - v1.y)) {
-        dY_denom = (v3.y - v2.y);
+        dY_denom = dy32;
         if (t.texture == NULL) {
             dR_fract = (v3.r - v2.r);
             dG_fract = (v3.g - v2.g);
@@ -978,44 +1019,67 @@ void CEngine::FillTriangle(TTriangle t)
             v = v2.v * dY_denom;
         }
     }
-    eA = dx32 + dy32;
-    eB = dx31 + dy31;
 
-    while (1) {
-        if ((xB == v3.x) && (y == v3.y)) break;
-        neB = 2 * eB;
-        if (neB >= dy31) {
-            eB += dy31;
-            if (xB == v3.x) break;
-            xB += ix31;
-        }
-        if (neB <= dx31) {
-            eB += dx31;
+    if (dy32 > dx32) { std::swap(dx32, dy32); changed1 = true; }
+    else { changed1 = false; }
 
-            while (1) {
-                neA = 2 * eA;
-                if (neA >= dy32) {
-                    eA += dy32;
-                    if (xA == v3.x) break;
-                    xA += ix32;
+    eA = (int)(dx32 >> 1);
+    xA = v2.x;
+
+    for (int i = 0; i <= dx32;) {
+        eAp = 0;
+        eBp = 0;
+
+        eA += dy32;
+        if (changed1) {
+            if (++i <= dx32) {
+                if (eA >= dx32) {
+                    eA -= dx32;
+                    eAp = ix32;
                 }
-                if (neA <= dx32) {
-                    eA += dx32;
+            }
+        }
+        else {
+            while ((++i <= dx32) && (eA < dx32)) {
+                xA += ix32;
+                eA += dy32;
+            }
+            eA -= dx32;
+            eAp += ix32;
+        }
+
+        if (changed2) {
+            if (xB != v3.x) {
+                eB += dy31;
+                while (eB >= dx31) {
+                    eB -= dx31;
+                    eBp = ix31;
+                }
+            }
+        }
+        else {
+            while (xB != v3.x) {
+                eB += dy31;
+                if (eB < dx31) xB += ix31;
+                else {
+                    eB -= dx31;
                     break;
                 }
             }
-
-            drawline(xA, xB, y, r, g, b, u, v, dY_denom);                     // Draw line from min to max points found on the y
-            
-            if (y == v3.y) break;
-            y++;
-            r += dR_fract;
-            g += dG_fract;
-            b += dB_fract;
-            u += dU_fract;
-            v += dV_fract;
-            if (y == screeny) break;
+            eBp += ix31;
         }
+
+        drawline(xA, xB, y, r, g, b, u, v, dY_denom);
+        xA += eAp;
+        xB += eBp;
+        y++;                                                                // Now increase y
+        r += dR_fract;
+        g += dG_fract;
+        b += dB_fract;
+        u += dU_fract;
+        v += dV_fract;
+        if (y > v3.y) break;
+        if (y == screeny) return;
     }
 }
 

@@ -6,9 +6,13 @@ Software rendering of primitives (Visual Studio & OpenGL)
 
 ## Description
 
-Textures are loaded from bitmap files. 
-Matrix operations were used to rotate and display the cube: rotation around the Z axis,
-rotation around the X axis, translation and projection
+Textures are loaded from bitmap files.
+Vertices can be read from OBJ files.
+Matrix operations were used to rotate and display the object : rotation around the Z axis,
+rotation around the X axis, translation and projection.
+Filling the triangles is done by interpolating the colors of the vertices 
+or using textures with a fast algorithm without using floating-point numbers.
+Pixel setting is done directly on memory.
 
 ## Getting Started
 
@@ -27,7 +31,7 @@ Krzysztof Mojsiewicz
 
 ## Version History
 
-* 1.0.0.6
+* 1.0.0.7
     * Initial Release
 
 ## License
