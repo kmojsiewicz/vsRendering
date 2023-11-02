@@ -108,6 +108,7 @@ Pixel  Pixel::operator * (const float i) const
 	float fB = std::min(255.0f, std::max(0.0f, float(b) * i));
 	return Pixel(uint8_t(fR), uint8_t(fG), uint8_t(fB), a);
 }
+
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
@@ -179,6 +180,7 @@ private:
 	bool		b_glSync = false;
 
 	CLayer		layer;
+
 private:
 	static std::atomic<bool> bAtomActive;									// If anything sets this flag to false, the engine "should" shut down gracefully
 	void		EngineThread();
@@ -198,6 +200,21 @@ private:
 	void		RenderClearBuffer(Pixel p, bool bDepth);
 	void		RenderDisplayFrame();
 	void		RenderPrepareDrawing();
+
+	// State of keyboard
+	short m_keyOldState[256] = { 0 };
+	short m_keyNewState[256] = { 0 };
+	bool m_mouseOldState[5] = { 0 };
+	bool m_mouseNewState[5] = { 0 };
+	int m_mousePosX;
+	int m_mousePosY;
+
+	struct sKeyState {
+		bool bPressed;
+		bool bReleased;
+		bool bHeld;
+	} m_keys[256], m_mouse[5];
+
 public:
 	uint32_t	RenderCreateTexture(const uint32_t width, const uint32_t height, const bool filtered, const bool clamp);
 	void		RenderApplyTexture(uint32_t id);
@@ -223,6 +240,9 @@ public:
 	int32_t ScreenHeight() const				{ return iScreenSizeY; }	// Returns the height of the screen in "pixels"
 	void Clear(Pixel p)							{ layer.Clear(p); }			// Clears entire draw target to Pixel
 	CLayer* GetDrawTarget()						{ return &layer; }
+
+public:																		// Hardware Interfaces
+	sKeyState GetKey(int nKeyID) { return m_keys[nKeyID]; }					// Get the state of a specific keyboard button
 
 public:																		// Branding
 	std::string sAppName;
@@ -300,6 +320,12 @@ CPlatform::CPlatform()
 {
 	sAppName = "Undefined";
 	engine = std::unique_ptr<CPlatform>(this);
+
+	std::memset(m_keyNewState, 0, 256 * sizeof(short));
+	std::memset(m_keyOldState, 0, 256 * sizeof(short));
+	std::memset(m_keys, 0, 256 * sizeof(sKeyState));
+	m_mousePosX = 0;
+	m_mousePosY = 0;
 }
 
 CPlatform::~CPlatform()
@@ -489,6 +515,24 @@ void CPlatform::CoreUpdate()
 
 	float fElapsedTime = elapsedTime.count();								// Our time per frame coefficient
 	fLastElapsed = fElapsedTime;
+
+	for (int i = 0; i < 256; i++) {											// Handle Keyboard Input
+		m_keyNewState[i] = GetAsyncKeyState(i);
+		m_keys[i].bPressed = false;
+		m_keys[i].bReleased = false;
+
+		if (m_keyNewState[i] != m_keyOldState[i]) {
+			if (m_keyNewState[i] & 0x8000) {
+				m_keys[i].bPressed = !m_keys[i].bHeld;
+				m_keys[i].bHeld = true;
+			}
+			else {
+				m_keys[i].bReleased = true;
+				m_keys[i].bHeld = false;
+			}
+		}
+		m_keyOldState[i] = m_keyNewState[i];
+	}
 
 	try {
 		if (!OnUserUpdate(fElapsedTime)) bAtomActive = false;

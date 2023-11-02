@@ -536,6 +536,7 @@ TVec3d Vector_CrossProduct(TVec3d& v1, TVec3d& v2)
     v.z = v1.x * v2.y - v1.y * v2.x;
     return v;
 }
+
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
@@ -634,6 +635,26 @@ TMat4x4 Matrix_MultiplyMatrix(TMat4x4& m1, TMat4x4& m2)
         for (int r = 0; r < 4; r++)
             matrix.m[r][c] = m1.m[r][0] * m2.m[0][c] + m1.m[r][1] * m2.m[1][c] + m1.m[r][2] * m2.m[2][c] + m1.m[r][3] * m2.m[3][c];
     return matrix;
+}
+
+TMat4x4 Matrix_PointAt(TVec3d& pos, TVec3d& target, TVec3d& up)
+{
+    TVec3d newForward = Vector_Sub(target, pos);                            // Calculate new forward direction
+    newForward = Vector_Normalise(newForward);
+
+    TVec3d a = Vector_Mul(newForward, Vector_DotProduct(up, newForward));   // Calculate new Up direction
+    TVec3d newUp = Vector_Sub(up, a);
+    newUp = Vector_Normalise(newUp);
+
+    TVec3d newRight = Vector_CrossProduct(newUp, newForward);               // New Right direction is easy, its just cross product
+
+    TMat4x4 matrix;                                                         // Construct Dimensioning and Translation Matrix	
+    matrix.m[0][0] = newRight.x;	matrix.m[0][1] = newRight.y;	matrix.m[0][2] = newRight.z;	matrix.m[0][3] = 0.0f;
+    matrix.m[1][0] = newUp.x;		matrix.m[1][1] = newUp.y;		matrix.m[1][2] = newUp.z;		matrix.m[1][3] = 0.0f;
+    matrix.m[2][0] = newForward.x;	matrix.m[2][1] = newForward.y;	matrix.m[2][2] = newForward.z;	matrix.m[2][3] = 0.0f;
+    matrix.m[3][0] = pos.x;			matrix.m[3][1] = pos.y;			matrix.m[3][2] = pos.z;			matrix.m[3][3] = 1.0f;
+    return matrix;
+
 }
 
 TMat4x4 Matrix_QuickInverse(TMat4x4& m)                                     // Only for Rotation/Translation Matrices
