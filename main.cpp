@@ -11,10 +11,6 @@
 
 using namespace std;
 
-struct TMat4x4 {
-    float m[4][4] = { 0 };
-};
-
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
@@ -41,36 +37,13 @@ private:
     TMat4x4 matProj;
     TVec3d vCamera;
     float fTheta;
-    float fFar = 1000.0f;
-
-    void MultiplyMatrixVector(TVertex& i, TVertex& o, TMat4x4& m)
-    {
-        o.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + m.m[3][0];
-        o.y = i.x * m.m[0][1] + i.y * m.m[1][1] + i.z * m.m[2][1] + m.m[3][1];
-        o.z = i.x * m.m[0][2] + i.y * m.m[1][2] + i.z * m.m[2][2] + m.m[3][2];
-        float w = i.x * m.m[0][3] + i.y * m.m[1][3] + i.z * m.m[2][3] + m.m[3][3];
-
-        if (w != 0.0f) {
-            o.x /= w; o.y /= w; o.z /= w;
-        }
-    }
-
-    void MultiplyMatrixByMatrix(TMat4x4& o, TMat4x4& m1, TMat4x4& m2)
-    {
-        int i, j, k;
-        for (i = 0; i < 4; ++i) {
-            for (j = 0; j < 4; ++j) {
-                for (k = 0; k < 4; ++k) {
-                    o.m[i][j] += m1.m[i][k] * m2.m[k][j];
-                }
-            }
-        }
-    }
 
 public:
     bool OnUserCreate() override
     {
-        mesh.LoadFromObjectFile("test.obj", nullptr, WHITE, 1.0);
+        matProj = Matrix_MakeProjection(90.0f, (float)WND_HEIGHT / (float)WND_WIDTH, 0.1f, 1000.0f, 1.0f);      // field of view = 90 degree, fNear = 0.1f, fFar = 1000.0f, fScale = 1.0f
+
+        mesh.LoadFromObjectFile("teapot.obj", nullptr, WHITE, 1.0);
         //mesh.MakeQube(nullptr, WHITE, 1.0);
         //frontTexture.LoadFromBitmap("negz.bmp");   mesh.triangles[0].SetTexture(&frontTexture);   mesh.triangles[1].SetTexture(&frontTexture);      // front
         //rightTexture.LoadFromBitmap("posx.bmp");   mesh.triangles[2].SetTexture(&rightTexture);   mesh.triangles[3].SetTexture(&rightTexture);      // right
@@ -78,105 +51,76 @@ public:
         //leftTexture.LoadFromBitmap("negx.bmp");    mesh.triangles[6].SetTexture(&leftTexture);    mesh.triangles[7].SetTexture(&leftTexture);       // left
         //topTexture.LoadFromBitmap("posy.bmp");     mesh.triangles[8].SetTexture(&topTexture);     mesh.triangles[9].SetTexture(&topTexture);        // top
         //bottomTexture.LoadFromBitmap("negy.bmp");  mesh.triangles[10].SetTexture(&bottomTexture); mesh.triangles[11].SetTexture(&bottomTexture);    // bottom
-
-        float fScale = 1.0f;
-        float fNear = 0.1f;
-        float fFov = 90.0f;
-        float fAspectRatio = (float)WND_HEIGHT / (float)WND_WIDTH;
-        float fFovRad = (int)1.0f / tanf(fFov * 0.5f / 180.0f * (int)M_PI);
-
-        matProj.m[0][0] = fScale * fAspectRatio * fFovRad;                  // Projection matrix
-        matProj.m[1][1] = fScale * fFovRad;
-        matProj.m[2][2] = fScale * fFar / (fFar - fNear);
-        matProj.m[3][2] = (-fFar * fNear) / (fFar - fNear);
-        matProj.m[2][3] = 1.0f;
-        matProj.m[3][3] = 0.0f;
-
+        
         return true;
     }
 
     bool OnUserUpdate(float fElapsedTime) override
     {
         vector<TTriangle> vTrianglesToRaster;
-        TMat4x4 matRotX, matRotZ, matRotZX;                                 // Set up rotation matrices
 
+        //ClrZBuffer();                                                     // Clear Screen and Z buffer
         Clear(BLACK);
-        ClrZBuffer();                                                       // Clear Screen and Z buffer
         fTheta += 1.0f * fElapsedTime;
 
         get_timepoint();
-            matRotZ.m[0][0] = cosf(fTheta);                                 // Rotation Z
-            matRotZ.m[0][1] = sinf(fTheta);
-            matRotZ.m[1][0] = -sinf(fTheta);
-            matRotZ.m[1][1] = cosf(fTheta);
-            matRotZ.m[2][2] = 1;
-            matRotZ.m[3][3] = 1;
-            matRotX.m[0][0] = 1;                                            // Rotation X
-            matRotX.m[1][1] = cosf(fTheta * 0.5f);
-            matRotX.m[1][2] = sinf(fTheta * 0.5f);
-            matRotX.m[2][1] = -sinf(fTheta * 0.5f);
-            matRotX.m[2][2] = cosf(fTheta * 0.5f);
-            matRotX.m[3][3] = 1;
-            MultiplyMatrixByMatrix(matRotZX, matRotZ, matRotX);             // Rotation in Z-Axis and X-Axis
-        print_diff_timepoint("Rotation time     : ");
+            TMat4x4 matRotZ = Matrix_MakeRotationZ(fTheta);                 // Rotation Z
+            TMat4x4 matRotX = Matrix_MakeRotationX(fTheta * 0.5f);          // Rotation X
+            TMat4x4 matTrans = Matrix_MakeTranslation(0.0f, 0.0f, 8.0f);
+            TMat4x4 matWorld = Matrix_MakeIdentity();                       // Form World Matrix
+            matWorld = Matrix_MultiplyMatrix(matRotZ, matRotX);             // Transform by rotation (Rotation in Z-Axis and X-Axis)
+            matWorld = Matrix_MultiplyMatrix(matWorld, matTrans);           // Transform by translation
+        print_diff_timepoint("Rotation and translation time     : ");
+
 
         get_timepoint();
         for (auto tri : mesh.triangles) 
         {
-            TVec3d normal;
-            TTriangle triProjected, triTranslated, triRotatedZX;
+            TTriangle triTransformed, triProjected = tri;                   // get u and v data into projected triangles
+            triTransformed.V1.p = Matrix_MultiplyVector(matWorld, tri.V1.p);
+            triTransformed.V2.p = Matrix_MultiplyVector(matWorld, tri.V2.p);
+            triTransformed.V3.p = Matrix_MultiplyVector(matWorld, tri.V3.p);
 
-            triProjected = tri;                                             // get u and v data into projected triangles
-            MultiplyMatrixVector(tri.V1, triRotatedZX.V1, matRotZX);
-            MultiplyMatrixVector(tri.V2, triRotatedZX.V2, matRotZX);
-            MultiplyMatrixVector(tri.V3, triRotatedZX.V3, matRotZX);
-
-            triTranslated = triRotatedZX;
-            triTranslated.V1.x += 0.0f;                                     // Offset into the screen
-            triTranslated.V2.x += 0.0f;
-            triTranslated.V3.x += 0.0f;
-            triTranslated.V1.z += 8.0f;                                     // Offset into the screen
-            triTranslated.V2.z += 8.0f;
-            triTranslated.V3.z += 8.0f;
-
-            normal = triTranslated.NormalVector();
-            if (normal.x * (triTranslated.V1.x - vCamera.x) +
-                normal.y * (triTranslated.V1.y - vCamera.y) +
-                normal.z * (triTranslated.V1.z - vCamera.z) < 0.0)
+            TVec3d normal = triTransformed.NormalVector();
+            TVec3d vCameraRay = Vector_Sub(triTransformed.V1.p, vCamera);
+            if (Vector_DotProduct(normal, vCameraRay) < 0.0)
             {
-                TVec3d light_direction = { 0.0f, 0.0f, -1.0f };             // Illumination
-                float inv_sqrt_ll = q_rsqrt(light_direction.x * light_direction.x + light_direction.y * light_direction.y + light_direction.z * light_direction.z);
-                light_direction.x *= inv_sqrt_ll;
-                light_direction.y *= inv_sqrt_ll;
-                light_direction.z *= inv_sqrt_ll;
-                float dp = normal.x * light_direction.x + normal.y * light_direction.y + normal.z * light_direction.z;
+                TVec3d light_direction = { 0.0f, 1.0f, -1.0f };             // Illumination
+                light_direction = Vector_Normalise(light_direction);
+                float dp = max(0.1f, Vector_DotProduct(light_direction, normal));
 
-                // Project triangles from 3D --> 2D
-                MultiplyMatrixVector(triTranslated.V1, triProjected.V1, matProj);
-                MultiplyMatrixVector(triTranslated.V2, triProjected.V2, matProj);
-                MultiplyMatrixVector(triTranslated.V3, triProjected.V3, matProj);
-
+                // Project triangles from 3D --> 2D with normalising into cartesian space
+                triProjected.V1.p = Matrix_MultiplyVector(matProj, triTransformed.V1.p);
+                triProjected.V2.p = Matrix_MultiplyVector(matProj, triTransformed.V2.p);
+                triProjected.V3.p = Matrix_MultiplyVector(matProj, triTransformed.V3.p);
+                triProjected.V1.p = Vector_Div(triProjected.V1.p, triProjected.V1.p.w);
+                triProjected.V2.p = Vector_Div(triProjected.V2.p, triProjected.V2.p.w);
+                triProjected.V3.p = Vector_Div(triProjected.V3.p, triProjected.V3.p.w);
                 triProjected.light = dp;
-                triProjected.Translate(1.0f, 1.0f, 0.0f);
-                triProjected.Scale(0.5f * (float)ScreenWidth(), 0.5f * (float)ScreenHeight(), 0.5f * fFar);
+                triProjected.Translate({ 1.0f, 1.0f, 0.0f });               // Offset verts into visible normalised space
+                triProjected.Scale(0.5f * (float)ScreenWidth(), 0.5f * (float)ScreenHeight(), 0.5f * 100.0);
+                
                 vTrianglesToRaster.push_back(triProjected);
             }
         }
         print_diff_timepoint("Matrix projection : ");
 
+
         get_timepoint();                                                    // sort triangles from back to front
             sort(vTrianglesToRaster.begin(), vTrianglesToRaster.end(), [](TTriangle& t1, TTriangle t2) {
-                float z1 = (t1.V1.z + t1.V2.z + t1.V3.z) / 3.0f;
-                float z2 = (t2.V1.z + t2.V2.z + t2.V3.z) / 3.0f;
+                float z1 = (t1.V1.p.z + t1.V2.p.z + t1.V3.p.z) / 3.0f;
+                float z2 = (t2.V1.p.z + t2.V2.p.z + t2.V3.p.z) / 3.0f;
                 return z1 > z2;
-                });
+             });
         print_diff_timepoint("Sorting time      : ");
+
 
         get_timepoint();
         for (const auto &triProjected : vTrianglesToRaster) {               // Draw Triangles sorted
             FillTriangle(triProjected);                                     // Rasterize triangle
         }
         print_diff_timepoint("Rendering time  : ");
+
 
         printDurTimeOnce = false;
         return true;

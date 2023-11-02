@@ -485,35 +485,186 @@ int CTexture::id = 0;
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 
-template <class T>
-void swap_data(T& x, T& y)
-{
-    T temp;
-    temp = x;
-    x = y;
-    y = temp;
-}
-
 struct TVec3d {
-    float x;
-    float y;
-    float z;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 1.0f;
 };
 
+TVec3d Vector_Add(TVec3d& v1, TVec3d& v2)
+{
+    return { v1.x + v2.x, v1.y + v2.y, v1.z + v2.z };
+}
+
+TVec3d Vector_Sub(TVec3d& v1, TVec3d& v2)
+{
+    return { v1.x - v2.x, v1.y - v2.y, v1.z - v2.z };
+}
+
+TVec3d Vector_Mul(TVec3d& v, float k)
+{
+    return { v.x * k, v.y * k, v.z * k };
+}
+
+TVec3d Vector_Div(TVec3d& v, float k)
+{
+    return { v.x / k, v.y / k, v.z / k };
+}
+
+float Vector_DotProduct(TVec3d& v1, TVec3d& v2)
+{
+    return  v1.x * v2.x + v1.y * v2.y + v1.z * v2.z ;
+}
+
+float Vector_Length(TVec3d& v)
+{
+    return sqrtf(Vector_DotProduct(v, v));
+}
+
+TVec3d Vector_Normalise(TVec3d& v)
+{
+    float inv_sqrt_l = q_rsqrt(Vector_DotProduct(v, v));
+    return { v.x * inv_sqrt_l, v.y * inv_sqrt_l, v.z * inv_sqrt_l };
+}
+
+TVec3d Vector_CrossProduct(TVec3d& v1, TVec3d& v2)
+{
+    TVec3d v;
+    v.x = v1.y * v2.z - v1.z * v2.y;
+    v.y = v1.z * v2.x - v1.x * v2.z;
+    v.z = v1.x * v2.y - v1.y * v2.x;
+    return v;
+}
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+
+struct TMat4x4 {
+    float m[4][4] = { 0 };
+};
+
+TVec3d Matrix_MultiplyVector(TMat4x4& m, TVec3d& i)
+{
+    TVec3d v;
+    v.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + i.w * m.m[3][0];
+    v.y = i.x * m.m[0][1] + i.y * m.m[1][1] + i.z * m.m[2][1] + i.w * m.m[3][1];
+    v.z = i.x * m.m[0][2] + i.y * m.m[1][2] + i.z * m.m[2][2] + i.w * m.m[3][2];
+    v.w = i.x * m.m[0][3] + i.y * m.m[1][3] + i.z * m.m[2][3] + i.w * m.m[3][3];
+
+    return v;
+}
+
+TMat4x4 Matrix_MakeIdentity()
+{
+    TMat4x4 matrix;
+    matrix.m[0][0] = 1.0f;
+    matrix.m[1][1] = 1.0f;
+    matrix.m[2][2] = 1.0f;
+    matrix.m[3][3] = 1.0f;
+    return matrix;
+}
+
+TMat4x4 Matrix_MakeRotationX(float fAngleRad)
+{
+    TMat4x4 matrix;
+    matrix.m[0][0] = 1.0f;
+    matrix.m[1][1] = cosf(fAngleRad);
+    matrix.m[1][2] = sinf(fAngleRad);
+    matrix.m[2][1] = -sinf(fAngleRad);
+    matrix.m[2][2] = cosf(fAngleRad);
+    matrix.m[3][3] = 1.0f;
+    return matrix;
+}
+
+TMat4x4 Matrix_MakeRotationY(float fAngleRad)
+{
+    TMat4x4 matrix;
+    matrix.m[0][0] = cosf(fAngleRad);
+    matrix.m[0][2] = sinf(fAngleRad);
+    matrix.m[2][0] = -sinf(fAngleRad);
+    matrix.m[1][1] = 1.0f;
+    matrix.m[2][2] = cosf(fAngleRad);
+    matrix.m[3][3] = 1.0f;
+    return matrix;
+}
+
+TMat4x4 Matrix_MakeRotationZ(float fAngleRad)
+{
+    TMat4x4 matrix;
+    matrix.m[0][0] = cosf(fAngleRad);
+    matrix.m[0][1] = sinf(fAngleRad);
+    matrix.m[1][0] = -sinf(fAngleRad);
+    matrix.m[1][1] = cosf(fAngleRad);
+    matrix.m[2][2] = 1.0f;
+    matrix.m[3][3] = 1.0f;
+    return matrix;
+}
+
+TMat4x4 Matrix_MakeTranslation(float x, float y, float z)
+{
+    TMat4x4 matrix;
+    matrix.m[0][0] = 1.0f;
+    matrix.m[1][1] = 1.0f;
+    matrix.m[2][2] = 1.0f;
+    matrix.m[3][3] = 1.0f;
+    matrix.m[3][0] = x;
+    matrix.m[3][1] = y;
+    matrix.m[3][2] = z;
+    return matrix;
+}
+
+TMat4x4 Matrix_MakeProjection(float fFovDegrees, float fAspectRatio, float fNear, float fFar, float fScale = 1.0f)
+{
+    float fFovRad = 1.0f / tanf(fFovDegrees * 0.5f / 180.0f * 3.14159f);
+    TMat4x4 matrix;
+    matrix.m[0][0] = fScale * fAspectRatio * fFovRad;
+    matrix.m[1][1] = fScale * fFovRad;
+    matrix.m[2][2] = fScale * fFar / (fFar - fNear);
+    matrix.m[3][2] = (-fFar * fNear) / (fFar - fNear);
+    matrix.m[2][3] = 1.0f;
+    matrix.m[3][3] = 0.0f;
+    return matrix;
+}
+
+TMat4x4 Matrix_MultiplyMatrix(TMat4x4& m1, TMat4x4& m2)
+{
+    TMat4x4 matrix;
+    for (int c = 0; c < 4; c++)
+        for (int r = 0; r < 4; r++)
+            matrix.m[r][c] = m1.m[r][0] * m2.m[0][c] + m1.m[r][1] * m2.m[1][c] + m1.m[r][2] * m2.m[2][c] + m1.m[r][3] * m2.m[3][c];
+    return matrix;
+}
+
+TMat4x4 Matrix_QuickInverse(TMat4x4& m)                                     // Only for Rotation/Translation Matrices
+{
+    TMat4x4 matrix;
+    matrix.m[0][0] = m.m[0][0]; matrix.m[0][1] = m.m[1][0]; matrix.m[0][2] = m.m[2][0]; matrix.m[0][3] = 0.0f;
+    matrix.m[1][0] = m.m[0][1]; matrix.m[1][1] = m.m[1][1]; matrix.m[1][2] = m.m[2][1]; matrix.m[1][3] = 0.0f;
+    matrix.m[2][0] = m.m[0][2]; matrix.m[2][1] = m.m[1][2]; matrix.m[2][2] = m.m[2][2]; matrix.m[2][3] = 0.0f;
+    matrix.m[3][0] = -(m.m[3][0] * matrix.m[0][0] + m.m[3][1] * matrix.m[1][0] + m.m[3][2] * matrix.m[2][0]);
+    matrix.m[3][1] = -(m.m[3][0] * matrix.m[0][1] + m.m[3][1] * matrix.m[1][1] + m.m[3][2] * matrix.m[2][1]);
+    matrix.m[3][2] = -(m.m[3][0] * matrix.m[0][2] + m.m[3][1] * matrix.m[1][2] + m.m[3][2] * matrix.m[2][2]);
+    matrix.m[3][3] = 1.0f;
+    return matrix;
+}
+
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+
 struct TVertex {
-    float x;
-    float y;
-    float z;
+    TVec3d p;
     float u;
     float v;
-    Pixel p;
+    Pixel pixel;
 };
 
 struct TTriangle {
     TVertex     V1;
     TVertex     V2;
     TVertex     V3;
-    CTexture*   texture;
+    CTexture*   texture = nullptr;
     float       light;
 
     void SetTexture(CTexture* t)
@@ -521,43 +672,26 @@ struct TTriangle {
         texture = t;
     }
 
-    void Translate(float x, float y, float z) noexcept
+    void Translate(TVec3d v)
     {
-        V1.x += x; V2.x += x; V3.x += x;
-        V1.y += y; V2.y += y; V3.y += y;
-        V1.z += z; V2.z += z; V3.z += z;
+        V1.p = Vector_Add(V1.p, v);
+        V2.p = Vector_Add(V2.p, v);
+        V3.p = Vector_Add(V3.p, v);
     }
 
-    void Scale(float x, float y, float z) noexcept
+    void Scale(float x, float y, float z)
     {
-        V1.x *= x; V2.x *= x; V3.x *= x;
-        V1.y *= y; V2.y *= y; V3.y *= y;
-        V1.z *= z; V2.z *= z; V3.z *= z;
+        V1.p.x *= x; V2.p.x *= x; V3.p.x *= x;
+        V1.p.y *= y; V2.p.y *= y; V3.p.y *= y;
+        V1.p.z *= z; V2.p.z *= z; V3.p.z *= z;
     }
 
-    TVec3d NormalVector() noexcept
+    TVec3d NormalVector()
     {
-        TVec3d normal, line1, line2;
-
-        line1.x = V2.x - V1.x;
-        line1.y = V2.y - V1.y;
-        line1.z = V2.z - V1.z;
-
-        line2.x = V3.x - V1.x;
-        line2.y = V3.y - V1.y;
-        line2.z = V3.z - V1.z;
-
-        normal.x = line1.y * line2.z - line1.z * line2.y;
-        normal.y = line1.z * line2.x - line1.x * line2.z;
-        normal.z = line1.x * line2.y - line1.y * line2.x;
-
-        float inv_sqrt_nl = q_rsqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
-
-        normal.x *= inv_sqrt_nl;
-        normal.y *= inv_sqrt_nl;
-        normal.z *= inv_sqrt_nl;
-
-        return normal;
+        TVec3d line1 = Vector_Sub(V2.p, V1.p);
+        TVec3d line2 = Vector_Sub(V3.p, V1.p);
+        TVec3d normal = Vector_CrossProduct(line1, line2);
+        return Vector_Normalise(normal);
     }
 };
 
@@ -573,23 +707,23 @@ struct TMesh
     {
         triangles.clear();
         // FRONT
-        triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, defPixel },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, defPixel },    { 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 0.0f }, 0.0f, 0.0f, defPixel },    { { 1.0f, 1.0f, 0.0f }, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 0.0f }, 1.0f, 0.0f, defPixel },    { { 1.0f, 0.0f, 0.0f }, 1.0f, 1.0f, defPixel }, texture, light });
         // RIGHT
-        triangles.push_back({ { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, defPixel },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel },    { 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 0.0f }, 0.0f, 0.0f, defPixel },    { { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel },    { { 1.0f, 0.0f, 1.0f }, 1.0f, 1.0f, defPixel }, texture, light });
         // BACK
-        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, defPixel },    { 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel },    { 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 1.0f }, 0.0f, 0.0f, defPixel },    { { 0.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel },    { { 0.0f, 0.0f, 1.0f }, 1.0f, 1.0f, defPixel }, texture, light });
         // LEFT
-        triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, defPixel },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, defPixel },    { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 1.0f }, 0.0f, 0.0f, defPixel },    { { 0.0f, 1.0f, 0.0f }, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 0.0f }, 1.0f, 0.0f, defPixel },    { { 0.0f, 0.0f, 0.0f }, 1.0f, 1.0f, defPixel }, texture, light });
         // TOP
-        triangles.push_back({ { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f , defPixel},    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, defPixel },    { 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, defPixel },    { 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 1.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 1.0f }, 0.0f, 0.0f , defPixel},    { { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 1.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel },    { { 1.0f, 1.0f, 0.0f }, 1.0f, 1.0f, defPixel }, texture, light });
         // BOTTOM
-        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, defPixel },    { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, defPixel },    { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, defPixel },    { 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 0.0f, 1.0f }, 0.0f, 0.0f, defPixel },    { { 0.0f, 0.0f, 0.0f }, 1.0f, 0.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 0.0f, 0.0f }, 1.0f, 0.0f, defPixel },    { { 1.0f, 0.0f, 0.0f }, 1.0f, 1.0f, defPixel }, texture, light });
     }
 
     bool LoadFromObjectFile(std::string sfilename, CTexture *texture, Pixel defPixel, float light) {
@@ -627,7 +761,7 @@ struct TMesh
 
             if (key == "v") {                                               // vertex
                 TVertex v;
-                s >> v.x >> v.y >> v.z;
+                s >> v.p.x >> v.p.y >> v.p.z;
                 v.u = 0.0;
                 v.v = 0.0;
                 verts.push_back(v);
@@ -686,9 +820,9 @@ struct TMesh
                                     }
                                 }
                             }
-                            verts[v[0] - 1].p = defPixel;
-                            verts[v[1] - 1].p = defPixel;
-                            verts[v[2] - 1].p = defPixel;
+                            verts[v[0] - 1].pixel = defPixel;
+                            verts[v[1] - 1].pixel = defPixel;
+                            verts[v[2] - 1].pixel = defPixel;
                             triangles.push_back({ verts[v[0] - 1], verts[v[1] - 1], verts[v[2] - 1], texture , light });
                         }
                     }
@@ -790,9 +924,9 @@ void CEngine::DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p, 
 
 void CEngine::DrawTriangle(TTriangle t)
 {
-    DrawLine((int32_t)t.V1.x, (int32_t)t.V1.y, (int32_t)t.V2.x, (int32_t)t.V2.y);
-    DrawLine((int32_t)t.V2.x, (int32_t)t.V2.y, (int32_t)t.V3.x, (int32_t)t.V3.y);
-    DrawLine((int32_t)t.V1.x, (int32_t)t.V1.y, (int32_t)t.V3.x, (int32_t)t.V3.y);
+    DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V2.p.x, (int32_t)t.V2.p.y);
+    DrawLine((int32_t)t.V2.p.x, (int32_t)t.V2.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y);
+    DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y);
 }
 
 void CEngine::FillTriangle(TTriangle t)
@@ -804,9 +938,9 @@ void CEngine::FillTriangle(TTriangle t)
     } v1, v2, v3;
 
     if (t.texture == NULL) {
-        v1.r = (int)(t.V1.p.r * t.light); v1.g = (int)(t.V1.p.g * t.light); v1.b = (int)(t.V1.p.b * t.light);
-        v2.r = (int)(t.V2.p.r * t.light); v2.g = (int)(t.V2.p.g * t.light); v2.b = (int)(t.V2.p.b * t.light);
-        v3.r = (int)(t.V3.p.r * t.light); v3.g = (int)(t.V3.p.g * t.light); v3.b = (int)(t.V3.p.b * t.light);
+        v1.r = (int)(t.V1.pixel.r * t.light); v1.g = (int)(t.V1.pixel.g * t.light); v1.b = (int)(t.V1.pixel.b * t.light);
+        v2.r = (int)(t.V2.pixel.r * t.light); v2.g = (int)(t.V2.pixel.g * t.light); v2.b = (int)(t.V2.pixel.b * t.light);
+        v3.r = (int)(t.V3.pixel.r * t.light); v3.g = (int)(t.V3.pixel.g * t.light); v3.b = (int)(t.V3.pixel.b * t.light);
     }
     else {
         v1.u = (int)(t.V1.u * t.texture->GetWidth()); v1.v = (int)(t.V1.v * t.texture->GetHeight());
@@ -814,12 +948,12 @@ void CEngine::FillTriangle(TTriangle t)
         v3.u = (int)(t.V3.u * t.texture->GetWidth()); v3.v = (int)(t.V3.v * t.texture->GetHeight());
     }
 
-    v1.x = (int)(t.V1.x);
-    v2.x = (int)(t.V2.x);
-    v3.x = (int)(t.V3.x);
-    v1.y = (int)(t.V1.y);
-    v2.y = (int)(t.V2.y);
-    v3.y = (int)(t.V3.y);
+    v1.x = (int)(t.V1.p.x);
+    v2.x = (int)(t.V2.p.x);
+    v3.x = (int)(t.V3.p.x);
+    v1.y = (int)(t.V1.p.y);
+    v2.y = (int)(t.V2.p.y);
+    v3.y = (int)(t.V3.p.y);
 
     if (v1.y > v2.y) {                                                      // sort the vertices (v1,v2,v3) by their Y values
         std::swap(v1, v2);
