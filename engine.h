@@ -30,10 +30,10 @@ class CEngine : public CPlatform
 {
 public:
     static void ClrZBuffer(void);
-    inline void PutPixel(int x, int y, float z, Pixel p, float light);
-    bool Draw(int32_t x, int32_t y, Pixel p);
-    void DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p = WHITE, uint32_t pattern = 0xFFFFFFFF);
-    void DrawTriangle(TTriangle t);
+    inline void PutPixel(int x, int y, float z, Pixel pixel, float light);
+    bool Draw(int32_t x, int32_t y, Pixel pixel);
+    void DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel pixel = WHITE, uint32_t pattern = 0xFFFFFFFF);
+    void DrawTriangle(TTriangle t, Pixel pixel);
     void FillTriangle(TTriangle t);
 };
 
@@ -537,6 +537,18 @@ TVec3d Vector_CrossProduct(TVec3d& v1, TVec3d& v2)
     return v;
 }
 
+TVec3d Vector_IntersectPlane(TVec3d& plane_p, TVec3d& plane_n, TVec3d& lineStart, TVec3d& lineEnd)
+{
+    plane_n = Vector_Normalise(plane_n);
+    float plane_d = -Vector_DotProduct(plane_n, plane_p);
+    float ad = Vector_DotProduct(lineStart, plane_n);
+    float bd = Vector_DotProduct(lineEnd, plane_n);
+    float t = (-plane_d - ad) / (bd - ad);
+    TVec3d lineStartToEnd = Vector_Sub(lineEnd, lineStart);
+    TVec3d lineToIntersect = Vector_Mul(lineStartToEnd, t);
+    return Vector_Add(lineStart, lineToIntersect);
+}
+
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
@@ -871,7 +883,7 @@ void CEngine::ClrZBuffer(void)
     }
 }
 
-inline void CEngine::PutPixel(int x, int y, float z, Pixel p, float light)
+inline void CEngine::PutPixel(int x, int y, float z, Pixel pixel, float light)
 {
     if (x < 0) x = 0;
     if (x > (WND_WIDTH - 1)) x = WND_WIDTH - 1;
@@ -882,18 +894,18 @@ inline void CEngine::PutPixel(int x, int y, float z, Pixel p, float light)
 
     //if (z_buffer[x][y] > z) {
     //    z_buffer[x][y] = z;
-    pDrawTarget->SetPixel(x, y, p * light);
+    pDrawTarget->SetPixel(x, y, pixel * light);
     //}
 }
 
-bool CEngine::Draw(int32_t x, int32_t y, Pixel p)
+bool CEngine::Draw(int32_t x, int32_t y, Pixel pixel)
 {
     CLayer* pDrawTarget = GetDrawTarget();
-    pDrawTarget->SetPixel(x, y, p);
+    pDrawTarget->SetPixel(x, y, pixel);
     return true;
 }
 
-void CEngine::DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p, uint32_t pattern)
+void CEngine::DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel pixel, uint32_t pattern)
 {
     auto rol = [&](void) { pattern = (pattern << 1) | (pattern >> 31); return pattern & 1; };
 
@@ -925,7 +937,7 @@ void CEngine::DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p, 
 
     while (1) {
         if ((x1 >= 0) && (y1 >= 0) && (x1 < screenx) && (y1 < screeny) && rol()) {
-            pixels[x1 + y1 * screenx] = p;
+            pixels[x1 + y1 * screenx] = pixel;
         }
         if ((x1 == x2) && (y1 == y2)) break;
         ne21 = 2 * e21;
@@ -943,11 +955,11 @@ void CEngine::DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p, 
     }
 }
 
-void CEngine::DrawTriangle(TTriangle t)
+void CEngine::DrawTriangle(TTriangle t, Pixel pixel)
 {
-    DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V2.p.x, (int32_t)t.V2.p.y);
-    DrawLine((int32_t)t.V2.p.x, (int32_t)t.V2.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y);
-    DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y);
+    DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V2.p.x, (int32_t)t.V2.p.y, pixel);
+    DrawLine((int32_t)t.V2.p.x, (int32_t)t.V2.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y, pixel);
+    DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y, pixel);
 }
 
 void CEngine::FillTriangle(TTriangle t)
