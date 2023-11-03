@@ -1,12 +1,12 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
-#if __cplusplus >= 201703L                                                      // code for C++17 and later
+#if __cplusplus >= 201703L                                                  // code for C++17 and later
     #include <filesystem>
 #else
     #ifdef _WIN32
         #include <direct.h>
-        #define getcwd _getcwd                                                  // stupid MSFT "deprecation" warning
+        #define getcwd _getcwd                                              // stupid MSFT "deprecation" warning
     #else
         #include <unistd.h>
     #endif
@@ -19,7 +19,7 @@
 #define WND_WIDTH   800
 #define WND_HEIGHT  600
 
-static float z_buffer[WND_WIDTH][WND_HEIGHT];                               // z-buffer uses heap data
+static int z_buffer[WND_WIDTH * WND_HEIGHT];                                // z-buffer uses heap data
 
 struct TTriangle;
 //---------------------------------------------------------------------------
@@ -485,6 +485,12 @@ int CTexture::id = 0;
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 
+struct TVec2d {
+    float u = 0.0f;
+    float v = 0.0f;
+    float w = 1.0f;
+};
+
 struct TVec3d {
     float x = 0.0f;
     float y = 0.0f;
@@ -537,13 +543,13 @@ TVec3d Vector_CrossProduct(TVec3d& v1, TVec3d& v2)
     return v;
 }
 
-TVec3d Vector_IntersectPlane(TVec3d& plane_p, TVec3d& plane_n, TVec3d& lineStart, TVec3d& lineEnd)
+TVec3d Vector_IntersectPlane(TVec3d& plane_p, TVec3d& plane_n, TVec3d& lineStart, TVec3d& lineEnd, float& t)
 {
     plane_n = Vector_Normalise(plane_n);
     float plane_d = -Vector_DotProduct(plane_n, plane_p);
     float ad = Vector_DotProduct(lineStart, plane_n);
     float bd = Vector_DotProduct(lineEnd, plane_n);
-    float t = (-plane_d - ad) / (bd - ad);
+    t = (-plane_d - ad) / (bd - ad);
     TVec3d lineStartToEnd = Vector_Sub(lineEnd, lineStart);
     TVec3d lineToIntersect = Vector_Mul(lineStartToEnd, t);
     return Vector_Add(lineStart, lineToIntersect);
@@ -666,7 +672,6 @@ TMat4x4 Matrix_PointAt(TVec3d& pos, TVec3d& target, TVec3d& up)
     matrix.m[2][0] = newForward.x;	matrix.m[2][1] = newForward.y;	matrix.m[2][2] = newForward.z;	matrix.m[2][3] = 0.0f;
     matrix.m[3][0] = pos.x;			matrix.m[3][1] = pos.y;			matrix.m[3][2] = pos.z;			matrix.m[3][3] = 1.0f;
     return matrix;
-
 }
 
 TMat4x4 Matrix_QuickInverse(TMat4x4& m)                                     // Only for Rotation/Translation Matrices
@@ -688,8 +693,7 @@ TMat4x4 Matrix_QuickInverse(TMat4x4& m)                                     // O
 
 struct TVertex {
     TVec3d p;
-    float u;
-    float v;
+    TVec2d t;
     Pixel pixel;
 };
 
@@ -740,23 +744,23 @@ struct TMesh
     {
         triangles.clear();
         // FRONT
-        triangles.push_back({ { { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 0.0f }, 0.0f, 0.0f, defPixel },    { { 1.0f, 1.0f, 0.0f }, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 0.0f }, 1.0f, 0.0f, defPixel },    { { 1.0f, 0.0f, 0.0f }, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, defPixel },    { { 1.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 1.0f }, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 1.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 1.0f }, defPixel },    { { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, defPixel }, texture, light });
         // RIGHT
-        triangles.push_back({ { { 1.0f, 0.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 0.0f }, 0.0f, 0.0f, defPixel },    { { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { { 1.0f, 0.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel },    { { 1.0f, 0.0f, 1.0f }, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 1.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, defPixel },    { { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, defPixel },    { { 1.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, defPixel }, texture, light });
         // BACK
-        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 1.0f }, 0.0f, 0.0f, defPixel },    { { 0.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel },    { { 0.0f, 0.0f, 1.0f }, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, defPixel },    { { 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, defPixel },    { { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, defPixel }, texture, light });
         // LEFT
-        triangles.push_back({ { { 0.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 1.0f }, 0.0f, 0.0f, defPixel },    { { 0.0f, 1.0f, 0.0f }, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { { 0.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 0.0f }, 1.0f, 0.0f, defPixel },    { { 0.0f, 0.0f, 0.0f }, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, defPixel },    { { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 1.0f }, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 1.0f }, defPixel },    { { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, defPixel }, texture, light });
         // TOP
-        triangles.push_back({ { { 0.0f, 1.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 1.0f, 1.0f }, 0.0f, 0.0f , defPixel},    { { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { { 0.0f, 1.0f, 0.0f }, 0.0f, 1.0f, defPixel },    { { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f, defPixel },    { { 1.0f, 1.0f, 0.0f }, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } , defPixel},    { { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, defPixel }, texture, light });
+        triangles.push_back({ { { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, defPixel },    { { 1.0f, 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, defPixel }, texture, light });
         // BOTTOM
-        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 0.0f, 1.0f }, 0.0f, 0.0f, defPixel },    { { 0.0f, 0.0f, 0.0f }, 1.0f, 0.0f, defPixel }, texture, light });
-        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, 0.0f, 1.0f, defPixel },    { { 0.0f, 0.0f, 0.0f }, 1.0f, 0.0f, defPixel },    { { 1.0f, 0.0f, 0.0f }, 1.0f, 1.0f, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, defPixel },    { { 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 1.0f }, defPixel }, texture, light });
+        triangles.push_back({ { { 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, defPixel },    { { 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 1.0f }, defPixel },    { { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, defPixel }, texture, light });
     }
 
     bool LoadFromObjectFile(std::string sfilename, CTexture *texture, Pixel defPixel, float light) {
@@ -795,8 +799,8 @@ struct TMesh
             if (key == "v") {                                               // vertex
                 TVertex v;
                 s >> v.p.x >> v.p.y >> v.p.z;
-                v.u = 0.0;
-                v.v = 0.0;
+                v.t.u = 0.0;
+                v.t.v = 0.0;
                 verts.push_back(v);
             }
             else if (key == "vp") {                                         // parameter
@@ -853,10 +857,20 @@ struct TMesh
                                     }
                                 }
                             }
-                            verts[v[0] - 1].pixel = defPixel;
-                            verts[v[1] - 1].pixel = defPixel;
-                            verts[v[2] - 1].pixel = defPixel;
-                            triangles.push_back({ verts[v[0] - 1], verts[v[1] - 1], verts[v[2] - 1], texture , light });
+                            int v0_index, v1_index, v2_index;
+                            v0_index = v[0] - 1;
+                            v1_index = v[1] - 1;
+                            v2_index = v[2] - 1;
+                            if (v[0] < 0) v0_index = (int)verts.size() + v[0];
+                            if (v[1] < 0) v1_index = (int)verts.size() + v[1];
+                            if (v[2] < 0) v2_index = (int)verts.size() + v[2];
+
+                            if ((v0_index > 0) && (v1_index > 0) && (v2_index > 0)) {
+                                verts[v0_index].pixel = defPixel;
+                                verts[v1_index].pixel = defPixel;
+                                verts[v2_index].pixel = defPixel;
+                                triangles.push_back({ verts[v0_index], verts[v1_index], verts[v2_index], texture , light });
+                            }
                         }
                     }
 
@@ -875,11 +889,9 @@ struct TMesh
 
 void CEngine::ClrZBuffer(void)
 {
-    int x, y;
-    for (x = 0; x < WND_WIDTH; x++) {
-        for (y = 0; y < WND_HEIGHT; y++) {
-            z_buffer[x][y] = (float)INT_MAX;
-        }
+    int i;
+    for (i = 0; i < WND_WIDTH * WND_HEIGHT; i++) {
+        z_buffer[i] = 0;
     }
 }
 
@@ -891,11 +903,7 @@ inline void CEngine::PutPixel(int x, int y, float z, Pixel pixel, float light)
     if (y > (WND_HEIGHT - 1)) y = WND_HEIGHT - 1;
 
     CLayer* pDrawTarget = GetDrawTarget();
-
-    //if (z_buffer[x][y] > z) {
-    //    z_buffer[x][y] = z;
     pDrawTarget->SetPixel(x, y, pixel * light);
-    //}
 }
 
 bool CEngine::Draw(int32_t x, int32_t y, Pixel pixel)
@@ -967,7 +975,7 @@ void CEngine::FillTriangle(TTriangle t)
     struct intVertex {
         int x, y;
         int r, g, b;
-        int u, v;
+        int u, v, w;
     } v1, v2, v3;
 
     if (t.texture == NULL) {
@@ -976,10 +984,13 @@ void CEngine::FillTriangle(TTriangle t)
         v3.r = (int)(t.V3.pixel.r * t.light); v3.g = (int)(t.V3.pixel.g * t.light); v3.b = (int)(t.V3.pixel.b * t.light);
     }
     else {
-        v1.u = (int)(t.V1.u * t.texture->GetWidth()); v1.v = (int)(t.V1.v * t.texture->GetHeight());
-        v2.u = (int)(t.V2.u * t.texture->GetWidth()); v2.v = (int)(t.V2.v * t.texture->GetHeight());
-        v3.u = (int)(t.V3.u * t.texture->GetWidth()); v3.v = (int)(t.V3.v * t.texture->GetHeight());
+        v1.u = (int)(t.V1.t.u * (t.texture->GetWidth()-1)); v1.v = (int)(t.V1.t.v * (t.texture->GetHeight()-1)); 
+        v2.u = (int)(t.V2.t.u * (t.texture->GetWidth()-1)); v2.v = (int)(t.V2.t.v * (t.texture->GetHeight()-1)); 
+        v3.u = (int)(t.V3.t.u * (t.texture->GetWidth()-1)); v3.v = (int)(t.V3.t.v * (t.texture->GetHeight()-1)); 
     }
+    v1.w = (int)(t.V1.t.w * 1000.0f);
+    v2.w = (int)(t.V2.t.w * 1000.0f);
+    v3.w = (int)(t.V3.t.w * 1000.0f);
 
     v1.x = (int)(t.V1.p.x);
     v2.x = (int)(t.V2.p.x);
@@ -1012,7 +1023,7 @@ void CEngine::FillTriangle(TTriangle t)
     int dy31 = (v3.y - v1.y);                                              // dy31 will always be positive 
     int dy32 = (v3.y - v2.y);                                              // dy32 will always be positive 
 
-    int dRdX_fract, dGdX_fract, dBdX_fract, dUdX_fract, dVdX_fract;
+    int dRdX_fract, dGdX_fract, dBdX_fract, dUdX_fract, dVdX_fract, dWdX_fract;
     if (t.texture == NULL) {
         dRdX_fract = ((v3.r - v1.r) * dy21 + (v1.r - v2.r) * dy31);
         dGdX_fract = ((v3.g - v1.g) * dy21 + (v1.g - v2.g) * dy31);
@@ -1022,9 +1033,10 @@ void CEngine::FillTriangle(TTriangle t)
         dUdX_fract = ((v3.u - v1.u) * dy21 + (v1.u - v2.u) * dy31);
         dVdX_fract = ((v3.v - v1.v) * dy21 + (v1.v - v2.v) * dy31);
     }
+    dWdX_fract = ((v3.w - v1.w) * dy21 + (v1.w - v2.w) * dy31);
     int dX_denom   = ((v3.x - v1.x) * dy21 + (v1.x - v2.x) * dy31);
 
-    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _u, int _v, int _dy_denom) {
+    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _u, int _v, int _w, int _dy_denom) {
 
         auto clipcolor = [](int c) {
             if (c < 0) return 0;
@@ -1039,38 +1051,56 @@ void CEngine::FillTriangle(TTriangle t)
         if (dX_denom == 0) dX_denom = 1;
 
         if (t.texture == NULL) {
+            int w;
             int red   = (_r / _dy_denom) * dX_denom;
             int green = (_g / _dy_denom) * dX_denom;
             int blue  = (_b / _dy_denom) * dX_denom;
+            int wpos  = (_w / _dy_denom) * dX_denom;
             int offset = ny * screenx + sx;
             for (int i = sx; i <= ex; i++) {
-                pixels[offset++] = Pixel(clipcolor(red / dX_denom), clipcolor(green / dX_denom), clipcolor(blue / dX_denom), 255);
+                w = wpos / dX_denom;
+                if (w > z_buffer[offset]) {
+                    z_buffer[offset] = w;
+                    pixels[offset] = Pixel(clipcolor(red / dX_denom), clipcolor(green / dX_denom), clipcolor(blue / dX_denom), 255);
+                }
+                offset++;
                 red += dRdX_fract;
                 green += dGdX_fract;
                 blue += dBdX_fract;
+                wpos += dWdX_fract;
             }
         }
         else {
+            int w;
             int upos = (_u / _dy_denom) * dX_denom;
             int vpos = (_v / _dy_denom) * dX_denom;
+            int wpos = (_w / _dy_denom) * dX_denom;
             int offset = ny * screenx + sx;
             for (int i = sx; i <= ex; i++) {
-                pixels[offset++] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom) * t.light;
+                w = wpos / dX_denom;
+                if (w > z_buffer[offset]) {
+                    z_buffer[offset] = w;
+                    w = (wpos / 1000);
+                    if (w != 0) pixels[offset] = t.texture->GetPixel((upos / w), (vpos / w)) * t.light;
+                    else        pixels[offset] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom) * t.light;
+                }
+                offset++;
                 upos += dUdX_fract;
                 vpos += dVdX_fract;
+                wpos += dWdX_fract;
             }
         }
     };
 
-    bool changed1, changed2;
+    bool changed1, changed2, v2OnRightSide;
     int eA, eB, eAp, eBp;
     int minx, maxx;
     int xA = v1.x;
     int xB = v1.x;
     int y = v1.y;
 
-    int r = 0, g = 0, b = 0, u = 0, v = 0;
-    int dR_fract = 0, dG_fract = 0, dB_fract = 0, dU_fract = 0, dV_fract = 0;
+    int r = 0, g = 0, b = 0, u = 0, v = 0, w = 0;
+    int dR_fract = 0, dG_fract = 0, dB_fract = 0, dU_fract = 0, dV_fract = 0, dW_fract = 0;
     int dY_denom = dy21;
 
     if (t.texture == NULL) {
@@ -1082,6 +1112,7 @@ void CEngine::FillTriangle(TTriangle t)
         dU_fract = (v2.u - v1.u);
         dV_fract = (v2.v - v1.v);
     }
+    dW_fract = (v2.w - v1.w);
     if (((v2.x - v1.x) * dy31) > ((v3.x - v1.x) * dy21)) {                  // V2 on the right side
         if (t.texture == NULL) {
             dR_fract = (v3.r - v1.r);
@@ -1090,9 +1121,14 @@ void CEngine::FillTriangle(TTriangle t)
         }
         else {
             dU_fract = (v3.u - v1.u);
-            dV_fract = (v3.v - v1.v);
+            dV_fract = (v3.v - v1.v); 
         }
+        dW_fract = (v3.w - v1.w);
+        v2OnRightSide = true;
         dY_denom = dy31;
+    }
+    else {
+        v2OnRightSide = false;
     }
     if (dY_denom == 0) dY_denom++;
 
@@ -1105,6 +1141,7 @@ void CEngine::FillTriangle(TTriangle t)
         u = v1.u * dY_denom;
         v = v1.v * dY_denom;
     }
+    w = v1.w * dY_denom;
 
     if (dy21 > dx21) { std::swap(dx21, dy21); changed1 = true; }
     else { changed1 = false; }
@@ -1161,7 +1198,7 @@ void CEngine::FillTriangle(TTriangle t)
                 if (maxx < xB) maxx = xB;
             }
 
-            drawline(minx, maxx, y, r, g, b, u, v, dY_denom);
+            drawline(minx, maxx, y, r, g, b, u, v, w, dY_denom);
             xA += eAp;
             xB += eBp;
             y++;                                                            // Now increase y
@@ -1170,12 +1207,13 @@ void CEngine::FillTriangle(TTriangle t)
             b += dB_fract;
             u += dU_fract;
             v += dV_fract;
+            w += dW_fract;
             if (y == v2.y) break;
             if (y == screeny) return;
         }
     }
 
-    if (dY_denom == (v2.y - v1.y)) {
+    if (!v2OnRightSide) {
         dY_denom = dy32;
         if (dY_denom == 0) dY_denom++;
         if (t.texture == NULL) {
@@ -1189,9 +1227,11 @@ void CEngine::FillTriangle(TTriangle t)
         else {
             dU_fract = (v3.u - v2.u);
             dV_fract = (v3.v - v2.v);
+            dW_fract = (v3.w - v2.w);
             u = v2.u * dY_denom;
             v = v2.v * dY_denom;
         }
+        w = v2.w * dY_denom;
     }
 
     if (dy32 > dx32) { std::swap(dx32, dy32); changed1 = true; }
@@ -1250,7 +1290,7 @@ void CEngine::FillTriangle(TTriangle t)
             if (maxx < xB) maxx = xB;
         }
 
-        drawline(minx, maxx, y, r, g, b, u, v, dY_denom);
+        drawline(minx, maxx, y, r, g, b, u, v, w, dY_denom);
         xA += eAp;
         xB += eBp;
         y++;                                                                // Now increase y
@@ -1259,6 +1299,7 @@ void CEngine::FillTriangle(TTriangle t)
         b += dB_fract;
         u += dU_fract;
         v += dV_fract;
+        w += dW_fract;
         if (y > v3.y) break;
         if (y == screeny) return;
     }

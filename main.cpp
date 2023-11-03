@@ -69,16 +69,36 @@ public:
 
         TVec3d* inside_points[3];  int nInsidePointCount = 0;               // Create two temporary storage arrays to classify points either side of plane
         TVec3d* outside_points[3]; int nOutsidePointCount = 0;              // If distance sign is positive, point lies on "inside" of plane
+        TVec2d* inside_tex[3];  int nInsideTexCount = 0;
+        TVec2d* outside_tex[3]; int nOutsideTexCount = 0;
 
         float d0 = dist(in_tri.V1.p);                                       // Get signed distance of each point in triangle to plane
         float d1 = dist(in_tri.V2.p);
         float d2 = dist(in_tri.V3.p);
-        if (d0 >= 0) { inside_points[nInsidePointCount++] = &in_tri.V1.p; }
-        else { outside_points[nOutsidePointCount++] = &in_tri.V1.p; }
-        if (d1 >= 0) { inside_points[nInsidePointCount++] = &in_tri.V2.p; }
-        else { outside_points[nOutsidePointCount++] = &in_tri.V2.p; }
-        if (d2 >= 0) { inside_points[nInsidePointCount++] = &in_tri.V3.p; }
-        else { outside_points[nOutsidePointCount++] = &in_tri.V3.p; }
+        if (d0 >= 0) { 
+            inside_points[nInsidePointCount++] = &in_tri.V1.p; 
+            inside_tex[nInsideTexCount++] = &in_tri.V1.t;
+        }
+        else { 
+            outside_points[nOutsidePointCount++] = &in_tri.V1.p; 
+            outside_tex[nOutsideTexCount++] = &in_tri.V1.t;
+        }
+        if (d1 >= 0) { 
+            inside_points[nInsidePointCount++] = &in_tri.V2.p; 
+            inside_tex[nInsideTexCount++] = &in_tri.V2.t;
+        }
+        else { 
+            outside_points[nOutsidePointCount++] = &in_tri.V2.p; 
+            outside_tex[nOutsideTexCount++] = &in_tri.V2.t;
+        }
+        if (d2 >= 0) { 
+            inside_points[nInsidePointCount++] = &in_tri.V3.p; 
+            inside_tex[nInsideTexCount++] = &in_tri.V3.t;
+        }
+        else { 
+            outside_points[nOutsidePointCount++] = &in_tri.V3.p; 
+            outside_tex[nOutsideTexCount++] = &in_tri.V3.t;
+        }
 
         // Now classify triangle points, and break the input triangle into 
         // smaller output triangles if required. There are four possible outcomes...
@@ -93,41 +113,62 @@ public:
 
         if (nInsidePointCount == 1 && nOutsidePointCount == 2) {            // Triangle should be clipped. As two points lie outside the plane, the triangle simply becomes a smaller triangle
             out_tri1.light = in_tri.light;                                  // Copy appearance info to new triangle
+            out_tri1.texture = in_tri.texture;
             out_tri1.V1.p = *inside_points[0];                              // The inside point is valid, so keep that...
+            out_tri1.V1.t = *inside_tex[0];
             // but the two new points are at the locations where the 
             // original sides of the triangle (lines) intersect with the plane
-            out_tri1.V2.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0]);
-            out_tri1.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[1]);
+            float t;
+            out_tri1.V2.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0], t);
+            out_tri1.V2.t.u = t * (outside_tex[0]->u - inside_tex[0]->u) + inside_tex[0]->u;
+            out_tri1.V2.t.v = t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
+            out_tri1.V2.t.w = t * (outside_tex[0]->w - inside_tex[0]->w) + inside_tex[0]->w;
+            out_tri1.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[1], t);
+            out_tri1.V3.t.u = t * (outside_tex[1]->u - inside_tex[0]->u) + inside_tex[0]->u;
+            out_tri1.V3.t.v = t * (outside_tex[1]->v - inside_tex[0]->v) + inside_tex[0]->v;
+            out_tri1.V3.t.w = t * (outside_tex[1]->w - inside_tex[0]->w) + inside_tex[0]->w;
 
-            out_tri1.V1.pixel = RED;
-            out_tri1.V2.pixel = RED;
-            out_tri1.V3.pixel = RED;
+            out_tri1.V1.pixel = in_tri.V1.pixel;                            // out_tri1.V1.pixel = RED;
+            out_tri1.V2.pixel = in_tri.V2.pixel;                            // out_tri1.V2.pixel = RED;
+            out_tri1.V3.pixel = in_tri.V3.pixel;                            // out_tri1.V3.pixel = RED;
             return 1;                                                       // Return the newly formed single triangle
         }
 
         if (nInsidePointCount == 2 && nOutsidePointCount == 1) {            // Triangle should be clipped. As two points lie inside the plane, the clipped triangle becomes a "quad". Fortunately, we can
             out_tri1.light = in_tri.light;                                  // represent a quad with two new triangles
             out_tri2.light = in_tri.light;                                  // Copy appearance info to new triangles
+            out_tri1.texture = in_tri.texture;
+            out_tri2.texture = in_tri.texture;
             // The first triangle consists of the two inside points and a new
             // point determined by the location where one side of the triangle
             // intersects with the plane
+            float t;
             out_tri1.V1.p = *inside_points[0];
             out_tri1.V2.p = *inside_points[1];
-            out_tri1.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0]);
+            out_tri1.V1.t = *inside_tex[0];
+            out_tri1.V2.t = *inside_tex[1];
+            out_tri1.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0], t);
+            out_tri1.V3.t.u = t * (outside_tex[0]->u - inside_tex[0]->u) + inside_tex[0]->u;
+            out_tri1.V3.t.v = t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
+            out_tri1.V3.t.w = t * (outside_tex[0]->w - inside_tex[0]->w) + inside_tex[0]->w;
             // The second triangle is composed of one of he inside points, a
             // new point determined by the intersection of the other side of the 
             // triangle and the plane, and the newly created point above
             out_tri2.V1.p = *inside_points[1];
+            out_tri2.V1.t = *inside_tex[1];
             out_tri2.V2.p = out_tri1.V3.p;
-            out_tri2.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[1], *outside_points[0]);
+            out_tri2.V2.t = out_tri1.V3.t;
+            out_tri2.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[1], *outside_points[0], t);
+            out_tri2.V3.t.u = t * (outside_tex[0]->u - inside_tex[1]->u) + inside_tex[1]->u;
+            out_tri2.V3.t.v = t * (outside_tex[0]->v - inside_tex[1]->v) + inside_tex[1]->v;
+            out_tri2.V3.t.w = t * (outside_tex[0]->w - inside_tex[1]->w) + inside_tex[1]->w;
 
-            out_tri1.V1.pixel = GREEN;
-            out_tri1.V2.pixel = GREEN;
-            out_tri1.V3.pixel = GREEN;
-
-            out_tri2.V1.pixel = BLUE;
-            out_tri2.V2.pixel = BLUE;
-            out_tri2.V3.pixel = BLUE;
+            out_tri1.V1.pixel = in_tri.V1.pixel;                            // out_tri1.V1.pixel = GREEN;
+            out_tri1.V2.pixel = in_tri.V2.pixel;                            // out_tri1.V2.pixel = GREEN;
+            out_tri1.V3.pixel = in_tri.V3.pixel;                            // out_tri1.V3.pixel = GREEN;
+            out_tri2.V1.pixel = in_tri.V1.pixel;                            // out_tri2.V1.pixel = BLUE;
+            out_tri2.V2.pixel = in_tri.V2.pixel;                            // out_tri2.V2.pixel = BLUE;
+            out_tri2.V3.pixel = in_tri.V3.pixel;                            // out_tri2.V3.pixel = BLUE;
             return 2;                                                       // Return two newly formed triangles which form a quad
         }
 
@@ -147,9 +188,9 @@ public:
         if (GetKey(L'S').bHeld) vCamera = (GetKey(VK_SHIFT).bHeld) ? Vector_Sub(vCamera, vForward2) : Vector_Sub(vCamera, vForward);
         if (GetKey(L'A').bHeld) fYaw -= 2.0f * fElapsedTime;
         if (GetKey(L'D').bHeld) fYaw += 2.0f * fElapsedTime;
+        if (GetKey(L' ').bHeld) fTheta += 1.0f * fElapsedTime;
         
         get_timepoint();
-            //fTheta += 1.0f * fElapsedTime;
             TMat4x4 matRotZ = Matrix_MakeRotationZ(fTheta);                 // Rotation Z
             TMat4x4 matRotX = Matrix_MakeRotationX(fTheta * 0.5f);          // Rotation X
             TMat4x4 matTrans = Matrix_MakeTranslation(0.0f, 0.0f, 5.0f);
@@ -184,7 +225,7 @@ public:
             {
                 TVec3d light_direction = { 0.0f, 1.0f, -1.0f };             // Illumination
                 light_direction = Vector_Normalise(light_direction);
-                triViewed.light = max(0.1f, Vector_DotProduct(light_direction, normal));
+                triViewed.light = max(0.2f, Vector_DotProduct(light_direction, normal));
 
                 // Convert World Space --> View Space
                 triViewed.V1.p = Matrix_MultiplyVector(matView, triTransformed.V1.p);
@@ -197,8 +238,7 @@ public:
                 TTriangle clipped[2];
                 nClippedTriangles = Triangle_ClipAgainstPlane({ 0.0f, 0.0f, 0.1f }, { 0.0f, 0.0f, 1.0f }, triViewed, clipped[0], clipped[1]);
 
-                // We may end up with multiple triangles form the clip, so project as required
-                for (int n = 0; n < nClippedTriangles; n++)
+                for (int n = 0; n < nClippedTriangles; n++)                 // We may end up with multiple triangles form the clip, so project as required
                 {
                     triProjected = clipped[n];
 
@@ -206,12 +246,20 @@ public:
                     triProjected.V1.p = Matrix_MultiplyVector(matProj, clipped[n].V1.p);
                     triProjected.V2.p = Matrix_MultiplyVector(matProj, clipped[n].V2.p);
                     triProjected.V3.p = Matrix_MultiplyVector(matProj, clipped[n].V3.p);
+                    triProjected.V1.t.u = triProjected.V1.t.u / triProjected.V1.p.w;
+                    triProjected.V2.t.u = triProjected.V2.t.u / triProjected.V2.p.w;
+                    triProjected.V3.t.u = triProjected.V3.t.u / triProjected.V3.p.w;
+                    triProjected.V1.t.v = triProjected.V1.t.v / triProjected.V1.p.w;
+                    triProjected.V2.t.v = triProjected.V2.t.v / triProjected.V2.p.w;
+                    triProjected.V3.t.v = triProjected.V3.t.v / triProjected.V3.p.w;
+                    triProjected.V1.t.w = 1.0f / triProjected.V1.p.w;
+                    triProjected.V2.t.w = 1.0f / triProjected.V2.p.w;
+                    triProjected.V3.t.w = 1.0f / triProjected.V3.p.w;
                     triProjected.V1.p = Vector_Div(triProjected.V1.p, triProjected.V1.p.w);
                     triProjected.V2.p = Vector_Div(triProjected.V2.p, triProjected.V2.p.w);
                     triProjected.V3.p = Vector_Div(triProjected.V3.p, triProjected.V3.p.w);
 
-                    // X/Y are inverted so put them back
-                    triProjected.V1.p.x *= -1.0f;
+                    triProjected.V1.p.x *= -1.0f;                           // X/Y are inverted so put them back
                     triProjected.V2.p.x *= -1.0f;
                     triProjected.V3.p.x *= -1.0f;
                     triProjected.V1.p.y *= -1.0f;
@@ -228,16 +276,16 @@ public:
         print_diff_timepoint("Matrix projection : ");
 
 
-        get_timepoint();                                                    // sort triangles from back to front
-            sort(vTrianglesToRaster.begin(), vTrianglesToRaster.end(), [](TTriangle& t1, TTriangle t2) {
-                float z1 = (t1.V1.p.z + t1.V2.p.z + t1.V3.p.z) / 3.0f;
-                float z2 = (t2.V1.p.z + t2.V2.p.z + t2.V3.p.z) / 3.0f;
-                return z1 > z2;
-             });
-        print_diff_timepoint("Sorting time      : ");
+        //get_timepoint();                                                    // sort triangles from back to front
+        //    sort(vTrianglesToRaster.begin(), vTrianglesToRaster.end(), [](TTriangle& t1, TTriangle t2) {
+        //        float z1 = (t1.V1.p.z + t1.V2.p.z + t1.V3.p.z) / 3.0f;
+        //        float z2 = (t2.V1.p.z + t2.V2.p.z + t2.V3.p.z) / 3.0f;
+        //        return z1 > z2;
+        //     });
+        //print_diff_timepoint("Sorting time      : ");
 
 
-        //ClrZBuffer();                                                     // Clear Screen and Z buffer
+        ClrZBuffer();                                                       // Clear Screen and Z buffer
         Clear(BLACK);
 
         get_timepoint();
@@ -271,11 +319,11 @@ public:
                     // clipping against next planes
                     for (int w = 0; w < nTrisToAdd; w++) listTriangles.push_back(clipped[w]);
                 }
-                nNewTriangles = listTriangles.size();
+                nNewTriangles = (int)listTriangles.size();
             }
             for (auto& t : listTriangles) {                                 // Draw the transformed, viewed, clipped, projected, sorted, clipped triangles
                 FillTriangle(t);                                            // Rasterize triangle
-                //DrawTriangle(t, BLACK);
+                //DrawTriangle(t, t.V1.pixel);
             }
         }
         print_diff_timepoint("Rendering time  : ");
