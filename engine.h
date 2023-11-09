@@ -19,9 +19,10 @@
 #define WND_WIDTH   800
 #define WND_HEIGHT  600
 
-static int z_buffer[WND_WIDTH * WND_HEIGHT];                                // z-buffer uses heap data
+static float z_buffer[WND_WIDTH * WND_HEIGHT];                                // z-buffer uses heap data
 
 struct TTriangle;
+class CTexture;
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
@@ -35,6 +36,11 @@ public:
     void DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel pixel = WHITE, uint32_t pattern = 0xFFFFFFFF);
     void DrawTriangle(TTriangle t, Pixel pixel);
     void FillTriangle(TTriangle t);
+    void TexturedTriangle(int x1, int y1, float u1, float v1, float w1,
+        int x2, int y2, float u2, float v2, float w2,
+        int x3, int y3, float u3, float v3, float w3,
+        CTexture* tex);
+    void TexturedTriangle(TTriangle* t);
 };
 
 //---------------------------------------------------------------------------
@@ -765,7 +771,9 @@ struct TMesh
 
     bool LoadFromObjectFile(std::string sfilename, CTexture *texture, Pixel defPixel, float light) {
 
-        std::vector<TVertex> verts;
+        bool isQuad;
+        std::vector<TVec3d> verts;
+        std::vector<TVec2d> texs;
         std::string line, key;
         std::ifstream ifs(sfilename.c_str(), std::ifstream::in);
 
@@ -797,18 +805,20 @@ struct TMesh
             s >> key >> std::ws;
 
             if (key == "v") {                                               // vertex
-                TVertex v;
-                s >> v.p.x >> v.p.y >> v.p.z;
-                v.t.u = 0.0;
-                v.t.v = 0.0;
+                TVec3d v;
+                s >> v.x >> v.y >> v.z;
                 verts.push_back(v);
             }
             else if (key == "vp") {                                         // parameter
             }
             else if (key == "vt") {                                         // texture coordinate
+                TVec2d t;
+                s >> t.u >> t.v;
+                texs.push_back(t);
             }
             else if (key == "f") {                                          // face
-                int v[3], t[3], n[3];
+                isQuad = false;
+                int v[4], t[4] = { 0 }, n[4] = { 0 };
                 while (!s.eof()) {
                     s >> v[0] >> std::ws;
                     if (s.peek() == '/') {
@@ -857,7 +867,27 @@ struct TMesh
                                     }
                                 }
                             }
-                            int v0_index, v1_index, v2_index;
+                            while (!s.eof()) {
+                                s >> v[3] >> std::ws;
+                                isQuad = true;
+                                if (s.peek() == '/') {
+                                    s.get();
+                                    if (s.peek() == '/') {
+                                        s.get();
+                                        s >> n[3] >> std::ws;
+                                    }
+                                    else {
+                                        s >> t[3] >> std::ws;
+                                        if (s.peek() == '/') {
+                                            s.get();
+                                            s >> n[3] >> std::ws;
+                                        }
+                                    }
+                                }
+                            }
+                            int v0_index, v1_index, v2_index, v3_index;
+                            int t0_index = 0, t1_index = 0, t2_index = 0, t3_index = 0;
+
                             v0_index = v[0] - 1;
                             v1_index = v[1] - 1;
                             v2_index = v[2] - 1;
@@ -866,10 +896,37 @@ struct TMesh
                             if (v[2] < 0) v2_index = (int)verts.size() + v[2];
 
                             if ((v0_index > 0) && (v1_index > 0) && (v2_index > 0)) {
-                                verts[v0_index].pixel = defPixel;
-                                verts[v1_index].pixel = defPixel;
-                                verts[v2_index].pixel = defPixel;
-                                triangles.push_back({ verts[v0_index], verts[v1_index], verts[v2_index], texture , light });
+                                TVertex v1, v2, v3, v4;
+                                v1.p = verts[v0_index]; v1.pixel = defPixel;
+                                v2.p = verts[v1_index]; v2.pixel = defPixel;
+                                v3.p = verts[v2_index]; v3.pixel = defPixel;
+                                if ((t[0] != 0) && (t[1] != 0) && (t[2] != 0)) {
+                                    t0_index = t[0] - 1;
+                                    t1_index = t[1] - 1;
+                                    t2_index = t[2] - 1;
+                                    if (t[0] < 0) t0_index = (int)texs.size() + t[0];
+                                    if (t[1] < 0) t1_index = (int)texs.size() + t[1];
+                                    if (t[2] < 0) t2_index = (int)texs.size() + t[2];
+                                    v1.t = texs[t0_index];
+                                    v2.t = texs[t1_index];
+                                    v3.t = texs[t2_index];
+                                }
+
+                                triangles.push_back({ v1, v2, v3, texture , light });
+
+                                if (isQuad) {
+                                    v3_index = v[3] - 1;
+                                    if (v[3] < 0) v3_index = (int)verts.size() + v[3];
+                                    if ((v3_index > 0)) {
+                                        v4.p = verts[v3_index]; v4.pixel = defPixel;
+                                        if ((t[0] != 0) && (t[1] != 0) && (t[2] != 0) && (t[3] != 0)) {
+                                            t3_index = t[3] - 1;
+                                            if (t[3] < 0) t3_index = (int)texs.size() + t[3];
+                                            v4.t = texs[t3_index];
+                                        }
+                                        triangles.push_back({ v1, v3, v4, texture, light });
+                                    }
+                                }
                             }
                         }
                     }
@@ -891,7 +948,7 @@ void CEngine::ClrZBuffer(void)
 {
     int i;
     for (i = 0; i < WND_WIDTH * WND_HEIGHT; i++) {
-        z_buffer[i] = 0;
+        z_buffer[i] = 0.0f;
     }
 }
 
@@ -970,12 +1027,149 @@ void CEngine::DrawTriangle(TTriangle t, Pixel pixel)
     DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y, pixel);
 }
 
+void CEngine::TexturedTriangle(TTriangle* t)
+{
+    Pixel* pixels = GetDrawTarget()->GetData();
+    CTexture* tex = t->texture;
+
+    struct intVertex {
+        int x, y;
+        int r, g, b;
+        float u,v,w;
+    } v1, v2, v3;
+
+    v1.x = (int)(t->V1.p.x); v2.x = (int)(t->V2.p.x); v3.x = (int)(t->V3.p.x);
+    v1.y = (int)(t->V1.p.y); v2.y = (int)(t->V2.p.y); v3.y = (int)(t->V3.p.y);
+    v1.w = (t->V1.t.w); v2.w = (t->V2.t.w); v3.w = (t->V3.t.w);
+
+    if (t->texture == nullptr) {
+        v1.u = 0; v1.v = 0; v2.u = 0; v2.v = 0; v3.u = 0; v3.v = 0;
+    }
+    else {
+        v1.u = ((t->V1.t.u * (t->texture->GetWidth() - 1)));
+        v1.v = ((t->V1.t.v * (t->texture->GetHeight() - 1)));
+        v2.u = ((t->V2.t.u * (t->texture->GetWidth() - 1)));
+        v2.v = ((t->V2.t.v * (t->texture->GetHeight() - 1)));
+        v3.u = ((t->V3.t.u * (t->texture->GetWidth() - 1)));
+        v3.v = ((t->V3.t.v * (t->texture->GetHeight() - 1)));
+    }
+
+    auto lineTextured = [&](int ax, int bx, int y, float tex_su, float tex_eu, float tex_sv, float tex_ev, float tex_sw, float tex_ew) 
+    {
+        if (ax > bx) {
+            std::swap(ax, bx);
+            std::swap(tex_su, tex_eu);
+            std::swap(tex_sv, tex_ev);
+            std::swap(tex_sw, tex_ew);
+        }
+        
+        int dtx_div = (bx - ax);
+        float tex_u = tex_su;
+        float tex_v = tex_sv;
+        float tex_w = tex_sw;
+        float dtx_u = (tex_eu - tex_su) / (float)dtx_div;
+        float dtx_v = (tex_ev - tex_sv) / (float)dtx_div;
+        float dtx_w = (tex_ew - tex_sw) / (float)dtx_div;
+
+        int offset = y * ScreenWidth() + ax;
+        for (int j = ax; j <= bx; j++) {
+            if (tex_w > z_buffer[offset]) {
+                z_buffer[offset] = tex_w;
+                pixels[offset] = tex->GetPixel((int)(tex_u / tex_w) + (int)(tex_v / tex_w) * t->texture->GetWidth()) * t->light;
+            }
+            offset++;
+            tex_u += dtx_u;
+            tex_v += dtx_v;
+            tex_w += dtx_w;
+        }
+    };
+
+
+    if (v1.y > v2.y) std::swap(v1, v2);                                     // sort the vertices (v1,v2,v3) by their Y values
+    if (v1.y > v3.y) std::swap(v1, v3);
+    if (v2.y > v3.y) std::swap(v2, v3);
+
+    float tex_su = v1.u;
+    float tex_sv = v1.v;
+    float tex_sw = v1.w;
+    float tex_eu = v1.u;
+    float tex_ev = v1.v;
+    float tex_ew = v1.w;
+
+    float du1_step = 0, dv1_step = 0,
+          du2_step = 0, dv2_step = 0,
+          dw1_step = 0, dw2_step = 0;
+    int xA, xB;
+    int dxA_mul = 0, dxB_mul = 0;
+    int dxA_div = 1, dxB_div = 1;
+    int dy1 = abs(v2.y - v1.y);
+    if (dy1) {
+        dxA_mul = (v2.x - v1.x);
+        dxA_div = dy1;
+        du1_step = (v2.u - v1.u) / (float)dy1;
+        dv1_step = (v2.v - v1.v) / (float)dy1;
+        dw1_step = (v2.w - v1.w) / (float)dy1;
+    }
+    int dy2 = abs(v3.y - v1.y);
+    if (dy2) {
+        dxB_mul = (v3.x - v1.x);
+        dxB_div = dy2;
+        du2_step = (v3.u - v1.u) / (float)dy2;
+        dv2_step = (v3.v - v1.v) / (float)dy2;
+        dw2_step = (v3.w - v1.w) / (float)dy2;
+    }
+
+    xB = v1.x * dxB_div;
+    if (dy1) {
+        xA = v1.x * dxA_div;
+        for (int y = v1.y; y <= v2.y; y++) {
+            lineTextured(xA / dxA_div, xB / dxB_div, y, tex_su, tex_eu, tex_sv, tex_ev, tex_sw, tex_ew);
+            xA += dxA_mul;
+            xB += dxB_mul;
+            tex_su += du1_step; tex_sv += dv1_step; tex_sw += dw1_step;
+            tex_eu += du2_step; tex_ev += dv2_step; tex_ew += dw2_step;
+        }
+        xB -= dxB_mul;
+        tex_eu -= du2_step; tex_ev -= dv2_step; tex_ew -= dw2_step;
+    }
+
+    du1_step = 0, 
+    dv1_step = 0;
+    dy1 = abs(v3.y - v2.y);
+    if (dy1) {
+        dxA_mul = (v3.x - v2.x);
+        dxA_div = dy1;
+        du1_step = (v3.u - v2.u) / (float)(dy1);
+        dv1_step = (v3.v - v2.v) / (float)(dy1);
+        dw1_step = (v3.w - v2.w) / (float)(dy1);
+    }
+    else { 
+        dxA_mul = 0;
+        dxA_div = 1;
+    }
+
+    if (dy1) {
+        xA = v2.x * dxA_div;
+        tex_su = v2.u;
+        tex_sv = v2.v;
+        tex_sw = v2.w;
+        for (int y = v2.y; y <= v3.y; y++) {
+            lineTextured(xA / dxA_div, xB / dxB_div, y, tex_su, tex_eu, tex_sv, tex_ev, tex_sw, tex_ew);
+            xA += dxA_mul;
+            xB += dxB_mul;
+            tex_su += du1_step; tex_sv += dv1_step; tex_sw += dw1_step;
+            tex_eu += du2_step; tex_ev += dv2_step; tex_ew += dw2_step;
+        }
+    }
+}
+
 void CEngine::FillTriangle(TTriangle t)
 {
     struct intVertex {
         int x, y;
         int r, g, b;
-        int u, v, w;
+        int u, v;
+        float w;
     } v1, v2, v3;
 
     if (t.texture == NULL) {
@@ -984,13 +1178,13 @@ void CEngine::FillTriangle(TTriangle t)
         v3.r = (int)(t.V3.pixel.r * t.light); v3.g = (int)(t.V3.pixel.g * t.light); v3.b = (int)(t.V3.pixel.b * t.light);
     }
     else {
-        v1.u = (int)(t.V1.t.u * (t.texture->GetWidth()-1)); v1.v = (int)(t.V1.t.v * (t.texture->GetHeight()-1)); 
-        v2.u = (int)(t.V2.t.u * (t.texture->GetWidth()-1)); v2.v = (int)(t.V2.t.v * (t.texture->GetHeight()-1)); 
-        v3.u = (int)(t.V3.t.u * (t.texture->GetWidth()-1)); v3.v = (int)(t.V3.t.v * (t.texture->GetHeight()-1)); 
+        v1.u = (int)((t.V1.t.u * (t.texture->GetWidth()  - 1)) / t.V1.t.w);
+        v1.v = (int)((t.V1.t.v * (t.texture->GetHeight() - 1)) / t.V1.t.w);
+        v2.u = (int)((t.V2.t.u * (t.texture->GetWidth()  - 1)) / t.V2.t.w);
+        v2.v = (int)((t.V2.t.v * (t.texture->GetHeight() - 1)) / t.V2.t.w);
+        v3.u = (int)((t.V3.t.u * (t.texture->GetWidth()  - 1)) / t.V3.t.w);
+        v3.v = (int)((t.V3.t.v * (t.texture->GetHeight() - 1)) / t.V3.t.w);
     }
-    v1.w = (int)(t.V1.t.w * 1000.0f);
-    v2.w = (int)(t.V2.t.w * 1000.0f);
-    v3.w = (int)(t.V3.t.w * 1000.0f);
 
     v1.x = (int)(t.V1.p.x);
     v2.x = (int)(t.V2.p.x);
@@ -998,6 +1192,12 @@ void CEngine::FillTriangle(TTriangle t)
     v1.y = (int)(t.V1.p.y);
     v2.y = (int)(t.V2.p.y);
     v3.y = (int)(t.V3.p.y);
+    v1.w = (int)(t.V1.t.w);
+    v2.w = (int)(t.V2.t.w);
+    v3.w = (int)(t.V3.t.w);
+    //v1.w = (1.0f / t.V1.t.w);
+    //v2.w = (1.0f / t.V2.t.w);
+    //v3.w = (1.0f / t.V3.t.w);
 
     if (v1.y > v2.y) {                                                      // sort the vertices (v1,v2,v3) by their Y values
         std::swap(v1, v2);
@@ -1023,7 +1223,8 @@ void CEngine::FillTriangle(TTriangle t)
     int dy31 = (v3.y - v1.y);                                              // dy31 will always be positive 
     int dy32 = (v3.y - v2.y);                                              // dy32 will always be positive 
 
-    int dRdX_fract, dGdX_fract, dBdX_fract, dUdX_fract, dVdX_fract, dWdX_fract;
+    float dWdX;
+    int dRdX_fract, dGdX_fract, dBdX_fract, dUdX_fract, dVdX_fract;
     if (t.texture == NULL) {
         dRdX_fract = ((v3.r - v1.r) * dy21 + (v1.r - v2.r) * dy31);
         dGdX_fract = ((v3.g - v1.g) * dy21 + (v1.g - v2.g) * dy31);
@@ -1033,10 +1234,10 @@ void CEngine::FillTriangle(TTriangle t)
         dUdX_fract = ((v3.u - v1.u) * dy21 + (v1.u - v2.u) * dy31);
         dVdX_fract = ((v3.v - v1.v) * dy21 + (v1.v - v2.v) * dy31);
     }
-    dWdX_fract = ((v3.w - v1.w) * dy21 + (v1.w - v2.w) * dy31);
     int dX_denom   = ((v3.x - v1.x) * dy21 + (v1.x - v2.x) * dy31);
+    dWdX = ((v3.w - v1.w) * (float)dy21 + (v1.w - v2.w) * (float)dy31) / (float)dX_denom;
 
-    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _u, int _v, int _w, int _dy_denom) {
+    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _u, int _v, float _w, int _dy_denom) {
 
         auto clipcolor = [](int c) {
             if (c < 0) return 0;
@@ -1051,14 +1252,12 @@ void CEngine::FillTriangle(TTriangle t)
         if (dX_denom == 0) dX_denom = 1;
 
         if (t.texture == NULL) {
-            int w;
+            float w = _w;
             int red   = (_r / _dy_denom) * dX_denom;
             int green = (_g / _dy_denom) * dX_denom;
             int blue  = (_b / _dy_denom) * dX_denom;
-            int wpos  = (_w / _dy_denom) * dX_denom;
             int offset = ny * screenx + sx;
             for (int i = sx; i <= ex; i++) {
-                w = wpos / dX_denom;
                 if (w > z_buffer[offset]) {
                     z_buffer[offset] = w;
                     pixels[offset] = Pixel(clipcolor(red / dX_denom), clipcolor(green / dX_denom), clipcolor(blue / dX_denom), 255);
@@ -1067,27 +1266,25 @@ void CEngine::FillTriangle(TTriangle t)
                 red += dRdX_fract;
                 green += dGdX_fract;
                 blue += dBdX_fract;
-                wpos += dWdX_fract;
+                w += dWdX;
             }
         }
         else {
-            int w;
+            float w = _w;
             int upos = (_u / _dy_denom) * dX_denom;
             int vpos = (_v / _dy_denom) * dX_denom;
-            int wpos = (_w / _dy_denom) * dX_denom;
             int offset = ny * screenx + sx;
             for (int i = sx; i <= ex; i++) {
-                w = wpos / dX_denom;
                 if (w > z_buffer[offset]) {
                     z_buffer[offset] = w;
-                    w = (wpos / 1000);
-                    if (w != 0) pixels[offset] = t.texture->GetPixel((upos / w), (vpos / w)) * t.light;
-                    else        pixels[offset] = t.texture->GetPixel(upos / dX_denom, vpos / dX_denom) * t.light;
+                    pixels[offset] = t.texture->GetPixel(upos / (dX_denom * w), vpos / (dX_denom * w)) * t.light;
+                    //pixels[offset] = t.texture->GetPixel(upos / (dX_denom), vpos / (dX_denom)) * t.light;
                 }
+
                 offset++;
                 upos += dUdX_fract;
                 vpos += dVdX_fract;
-                wpos += dWdX_fract;
+                w += dWdX;
             }
         }
     };
@@ -1099,8 +1296,9 @@ void CEngine::FillTriangle(TTriangle t)
     int xB = v1.x;
     int y = v1.y;
 
-    int r = 0, g = 0, b = 0, u = 0, v = 0, w = 0;
-    int dR_fract = 0, dG_fract = 0, dB_fract = 0, dU_fract = 0, dV_fract = 0, dW_fract = 0;
+    float w, dWdY;
+    int r = 0, g = 0, b = 0, u = 0, v = 0;
+    int dR_fract = 0, dG_fract = 0, dB_fract = 0, dU_fract = 0, dV_fract = 0;
     int dY_denom = dy21;
 
     if (t.texture == NULL) {
@@ -1112,7 +1310,7 @@ void CEngine::FillTriangle(TTriangle t)
         dU_fract = (v2.u - v1.u);
         dV_fract = (v2.v - v1.v);
     }
-    dW_fract = (v2.w - v1.w);
+    
     if (((v2.x - v1.x) * dy31) > ((v3.x - v1.x) * dy21)) {                  // V2 on the right side
         if (t.texture == NULL) {
             dR_fract = (v3.r - v1.r);
@@ -1123,14 +1321,17 @@ void CEngine::FillTriangle(TTriangle t)
             dU_fract = (v3.u - v1.u);
             dV_fract = (v3.v - v1.v); 
         }
-        dW_fract = (v3.w - v1.w);
-        v2OnRightSide = true;
+        dWdY = (v3.w - v1.w);
         dY_denom = dy31;
+        v2OnRightSide = true;
+        
     }
     else {
+        dWdY = (v2.w - v1.w);
         v2OnRightSide = false;
     }
     if (dY_denom == 0) dY_denom++;
+    dWdY /= (float)dY_denom;
 
     if (t.texture == NULL) {
         r = v1.r * dY_denom;                                                // (v1.r - 4 * dRdX_fract / dX_denom) * dY_denom;
@@ -1141,7 +1342,7 @@ void CEngine::FillTriangle(TTriangle t)
         u = v1.u * dY_denom;
         v = v1.v * dY_denom;
     }
-    w = v1.w * dY_denom;
+    w = v1.w;
 
     if (dy21 > dx21) { std::swap(dx21, dy21); changed1 = true; }
     else { changed1 = false; }
@@ -1207,7 +1408,7 @@ void CEngine::FillTriangle(TTriangle t)
             b += dB_fract;
             u += dU_fract;
             v += dV_fract;
-            w += dW_fract;
+            w += dWdY;
             if (y == v2.y) break;
             if (y == screeny) return;
         }
@@ -1227,11 +1428,11 @@ void CEngine::FillTriangle(TTriangle t)
         else {
             dU_fract = (v3.u - v2.u);
             dV_fract = (v3.v - v2.v);
-            dW_fract = (v3.w - v2.w);
             u = v2.u * dY_denom;
             v = v2.v * dY_denom;
         }
-        w = v2.w * dY_denom;
+        dWdY = (v3.w - v2.w) / (float)dY_denom;
+        w = v2.w;
     }
 
     if (dy32 > dx32) { std::swap(dx32, dy32); changed1 = true; }
@@ -1299,7 +1500,7 @@ void CEngine::FillTriangle(TTriangle t)
         b += dB_fract;
         u += dU_fract;
         v += dV_fract;
-        w += dW_fract;
+        w += dWdY;
         if (y > v3.y) break;
         if (y == screeny) return;
     }

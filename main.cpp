@@ -46,7 +46,8 @@ public:
     {
         matProj = Matrix_MakeProjection(90.0f, (float)WND_HEIGHT / (float)WND_WIDTH, 0.1f, 1000.0f, 1.0f);      // field of view = 90 degree, fNear = 0.1f, fFar = 1000.0f, fScale = 1.0f
 
-        mesh.LoadFromObjectFile("mountains.obj", nullptr, WHITE, 1.0);
+        frontTexture.LoadFromBitmap("high.bmp");
+        mesh.LoadFromObjectFile("obj\\spyro2.obj", &frontTexture, WHITE, 1.0);
         //mesh.MakeQube(nullptr, WHITE, 1.0);
         //frontTexture.LoadFromBitmap("negz.bmp");   mesh.triangles[0].SetTexture(&frontTexture);   mesh.triangles[1].SetTexture(&frontTexture);      // front
         //rightTexture.LoadFromBitmap("posx.bmp");   mesh.triangles[2].SetTexture(&rightTexture);   mesh.triangles[3].SetTexture(&rightTexture);      // right
@@ -54,7 +55,7 @@ public:
         //leftTexture.LoadFromBitmap("negx.bmp");    mesh.triangles[6].SetTexture(&leftTexture);    mesh.triangles[7].SetTexture(&leftTexture);       // left
         //topTexture.LoadFromBitmap("posy.bmp");     mesh.triangles[8].SetTexture(&topTexture);     mesh.triangles[9].SetTexture(&topTexture);        // top
         //bottomTexture.LoadFromBitmap("negy.bmp");  mesh.triangles[10].SetTexture(&bottomTexture); mesh.triangles[11].SetTexture(&bottomTexture);    // bottom
-        
+
         return true;
     }
 
@@ -184,12 +185,18 @@ public:
         
         TVec3d vForward = Vector_Mul(vLookDir, 8.0f * fElapsedTime);
         TVec3d vForward2 = Vector_Mul(vForward, 2.0f);
-        if (GetKey(L'W').bHeld) vCamera = (GetKey(VK_SHIFT).bHeld) ? Vector_Add(vCamera, vForward2) : Vector_Add(vCamera, vForward);
+        if (GetKey(L'W').bHeld) {
+            vCamera = (GetKey(VK_SHIFT).bHeld) ? Vector_Add(vCamera, vForward2) : Vector_Add(vCamera, vForward);
+            cout << vCamera.z << endl;
+        }
         if (GetKey(L'S').bHeld) vCamera = (GetKey(VK_SHIFT).bHeld) ? Vector_Sub(vCamera, vForward2) : Vector_Sub(vCamera, vForward);
         if (GetKey(L'A').bHeld) fYaw -= 2.0f * fElapsedTime;
         if (GetKey(L'D').bHeld) fYaw += 2.0f * fElapsedTime;
         if (GetKey(L' ').bHeld) fTheta += 1.0f * fElapsedTime;
-        
+        if (GetKey(L'1').bHeld) frontTexture.LoadFromBitmap("high.bmp");
+
+        //vCamera.z = 131;
+
         get_timepoint();
             TMat4x4 matRotZ = Matrix_MakeRotationZ(fTheta);                 // Rotation Z
             TMat4x4 matRotX = Matrix_MakeRotationX(fTheta * 0.5f);          // Rotation X
@@ -225,7 +232,7 @@ public:
             {
                 TVec3d light_direction = { 0.0f, 1.0f, -1.0f };             // Illumination
                 light_direction = Vector_Normalise(light_direction);
-                triViewed.light = max(0.2f, Vector_DotProduct(light_direction, normal));
+                triViewed.light = max(0.5f, Vector_DotProduct(light_direction, normal));
 
                 // Convert World Space --> View Space
                 triViewed.V1.p = Matrix_MultiplyVector(matView, triTransformed.V1.p);
@@ -246,6 +253,7 @@ public:
                     triProjected.V1.p = Matrix_MultiplyVector(matProj, clipped[n].V1.p);
                     triProjected.V2.p = Matrix_MultiplyVector(matProj, clipped[n].V2.p);
                     triProjected.V3.p = Matrix_MultiplyVector(matProj, clipped[n].V3.p);
+
                     triProjected.V1.t.u = triProjected.V1.t.u / triProjected.V1.p.w;
                     triProjected.V2.t.u = triProjected.V2.t.u / triProjected.V2.p.w;
                     triProjected.V3.t.u = triProjected.V3.t.u / triProjected.V3.p.w;
@@ -276,17 +284,17 @@ public:
         print_diff_timepoint("Matrix projection : ");
 
 
-        //get_timepoint();                                                    // sort triangles from back to front
-        //    sort(vTrianglesToRaster.begin(), vTrianglesToRaster.end(), [](TTriangle& t1, TTriangle t2) {
-        //        float z1 = (t1.V1.p.z + t1.V2.p.z + t1.V3.p.z) / 3.0f;
-        //        float z2 = (t2.V1.p.z + t2.V2.p.z + t2.V3.p.z) / 3.0f;
-        //        return z1 > z2;
-        //     });
-        //print_diff_timepoint("Sorting time      : ");
+        get_timepoint();                                                    // sort triangles from front to back
+            sort(vTrianglesToRaster.begin(), vTrianglesToRaster.end(), [](TTriangle& t1, TTriangle t2) {
+                float z1 = (t1.V1.p.z + t1.V2.p.z + t1.V3.p.z) / 3.0f;
+                float z2 = (t2.V1.p.z + t2.V2.p.z + t2.V3.p.z) / 3.0f;
+                return z1 < z2;
+             });
+        print_diff_timepoint("Sorting time      : ");
 
 
         ClrZBuffer();                                                       // Clear Screen and Z buffer
-        Clear(BLACK);
+        Clear(BLUE);
 
         get_timepoint();
         for (auto& triToRaster : vTrianglesToRaster) {                      // Loop through all transformed, viewed, projected, and sorted triangles
@@ -322,8 +330,12 @@ public:
                 nNewTriangles = (int)listTriangles.size();
             }
             for (auto& t : listTriangles) {                                 // Draw the transformed, viewed, clipped, projected, sorted, clipped triangles
-                FillTriangle(t);                                            // Rasterize triangle
+                //FillTriangle(t);                                            // Rasterize triangle
                 //DrawTriangle(t, t.V1.pixel);
+                //TexturedTriangle(t.V1.p.x, t.V1.p.y, t.V1.t.u, t.V1.t.v, t.V1.t.w,
+                //    t.V2.p.x, t.V2.p.y, t.V2.t.u, t.V2.t.v, t.V2.t.w,
+                //    t.V3.p.x, t.V3.p.y, t.V3.t.u, t.V3.t.v, t.V3.t.w, t.texture);
+                TexturedTriangle(&t);
             }
         }
         print_diff_timepoint("Rendering time  : ");
