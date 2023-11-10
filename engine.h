@@ -34,13 +34,9 @@ public:
     inline void PutPixel(int x, int y, float z, Pixel pixel, float light);
     bool Draw(int32_t x, int32_t y, Pixel pixel);
     void DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel pixel = WHITE, uint32_t pattern = 0xFFFFFFFF);
-    void DrawTriangle(TTriangle t, Pixel pixel);
-    void FillTriangle(TTriangle t);
-    void TexturedTriangle(int x1, int y1, float u1, float v1, float w1,
-        int x2, int y2, float u2, float v2, float w2,
-        int x3, int y3, float u3, float v3, float w3,
-        CTexture* tex);
+    void DrawTriangle(TTriangle* t, Pixel pixel);
     void TexturedTriangle(TTriangle* t);
+    void ColoredTriangle(TTriangle* t);
 };
 
 //---------------------------------------------------------------------------
@@ -736,6 +732,123 @@ struct TTriangle {
         TVec3d normal = Vector_CrossProduct(line1, line2);
         return Vector_Normalise(normal);
     }
+
+    int Triangle_ClipAgainstPlane(TVec3d plane_p, TVec3d plane_n, TTriangle& out_tri1, TTriangle& out_tri2)
+    {
+        plane_n = Vector_Normalise(plane_n);                                // Make sure plane normal is indeed normal
+
+        auto dist = [&](TVec3d& p) {                                        // Return signed shortest distance from point to plane, plane normal must be normalised
+            TVec3d n = Vector_Normalise(p);
+            return (plane_n.x * p.x + plane_n.y * p.y + plane_n.z * p.z - Vector_DotProduct(plane_n, plane_p));
+            };
+
+        TVec3d* inside_points[3];  int nInsidePointCount = 0;               // Create two temporary storage arrays to classify points either side of plane
+        TVec3d* outside_points[3]; int nOutsidePointCount = 0;              // If distance sign is positive, point lies on "inside" of plane
+        TVec2d* inside_tex[3];  int nInsideTexCount = 0;
+        TVec2d* outside_tex[3]; int nOutsideTexCount = 0;
+
+        float d0 = dist(V1.p);                                       // Get signed distance of each point in triangle to plane
+        float d1 = dist(V2.p);
+        float d2 = dist(V3.p);
+        if (d0 >= 0) {
+            inside_points[nInsidePointCount++] = &V1.p;
+            inside_tex[nInsideTexCount++] = &V1.t;
+        }
+        else {
+            outside_points[nOutsidePointCount++] = &V1.p;
+            outside_tex[nOutsideTexCount++] = &V1.t;
+        }
+        if (d1 >= 0) {
+            inside_points[nInsidePointCount++] = &V2.p;
+            inside_tex[nInsideTexCount++] = &V2.t;
+        }
+        else {
+            outside_points[nOutsidePointCount++] = &V2.p;
+            outside_tex[nOutsideTexCount++] = &V2.t;
+        }
+        if (d2 >= 0) {
+            inside_points[nInsidePointCount++] = &V3.p;
+            inside_tex[nInsideTexCount++] = &V3.t;
+        }
+        else {
+            outside_points[nOutsidePointCount++] = &V3.p;
+            outside_tex[nOutsideTexCount++] = &V3.t;
+        }
+
+        // Now classify triangle points, and break the input triangle into 
+        // smaller output triangles if required. There are four possible outcomes...
+        if (nInsidePointCount == 0) {                                       // All points lie on the outside of plane, so clip whole triangle
+            return 0;                                                       // No returned triangles are valid
+        }
+
+        if (nInsidePointCount == 3) {                                       // All points lie on the inside of plane, so do nothing
+            out_tri1 = *this;                                               // and allow the triangle to simply pass through
+            return 1;                                                       // Just the one returned original triangle is valid
+        }
+
+        if (nInsidePointCount == 1 && nOutsidePointCount == 2) {            // Triangle should be clipped. As two points lie outside the plane, the triangle simply becomes a smaller triangle
+            out_tri1.light = light;                                         // Copy appearance info to new triangle
+            out_tri1.texture = texture;
+            out_tri1.V1.p = *inside_points[0];                              // The inside point is valid, so keep that...
+            out_tri1.V1.t = *inside_tex[0];
+            // but the two new points are at the locations where the 
+            // original sides of the triangle (lines) intersect with the plane
+            float t;
+            out_tri1.V2.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0], t);
+            out_tri1.V2.t.u = t * (outside_tex[0]->u - inside_tex[0]->u) + inside_tex[0]->u;
+            out_tri1.V2.t.v = t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
+            out_tri1.V2.t.w = t * (outside_tex[0]->w - inside_tex[0]->w) + inside_tex[0]->w;
+            out_tri1.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[1], t);
+            out_tri1.V3.t.u = t * (outside_tex[1]->u - inside_tex[0]->u) + inside_tex[0]->u;
+            out_tri1.V3.t.v = t * (outside_tex[1]->v - inside_tex[0]->v) + inside_tex[0]->v;
+            out_tri1.V3.t.w = t * (outside_tex[1]->w - inside_tex[0]->w) + inside_tex[0]->w;
+
+            out_tri1.V1.pixel = V1.pixel;                                   // debugging out_tri1.V1.pixel = RED;
+            out_tri1.V2.pixel = V2.pixel;                                   // debugging out_tri1.V2.pixel = RED;
+            out_tri1.V3.pixel = V3.pixel;                                   // debugging out_tri1.V3.pixel = RED;
+            return 1;                                                       // Return the newly formed single triangle
+        }
+
+        if (nInsidePointCount == 2 && nOutsidePointCount == 1) {            // Triangle should be clipped. As two points lie inside the plane, the clipped triangle becomes a "quad". Fortunately, we can
+            out_tri1.light = light;                                         // represent a quad with two new triangles
+            out_tri2.light = light;                                         // Copy appearance info to new triangles
+            out_tri1.texture = texture;
+            out_tri2.texture = texture;
+            // The first triangle consists of the two inside points and a new
+            // point determined by the location where one side of the triangle
+            // intersects with the plane
+            float t;
+            out_tri1.V1.p = *inside_points[0];
+            out_tri1.V2.p = *inside_points[1];
+            out_tri1.V1.t = *inside_tex[0];
+            out_tri1.V2.t = *inside_tex[1];
+            out_tri1.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0], t);
+            out_tri1.V3.t.u = t * (outside_tex[0]->u - inside_tex[0]->u) + inside_tex[0]->u;
+            out_tri1.V3.t.v = t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
+            out_tri1.V3.t.w = t * (outside_tex[0]->w - inside_tex[0]->w) + inside_tex[0]->w;
+            // The second triangle is composed of one of he inside points, a
+            // new point determined by the intersection of the other side of the 
+            // triangle and the plane, and the newly created point above
+            out_tri2.V1.p = *inside_points[1];
+            out_tri2.V1.t = *inside_tex[1];
+            out_tri2.V2.p = out_tri1.V3.p;
+            out_tri2.V2.t = out_tri1.V3.t;
+            out_tri2.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[1], *outside_points[0], t);
+            out_tri2.V3.t.u = t * (outside_tex[0]->u - inside_tex[1]->u) + inside_tex[1]->u;
+            out_tri2.V3.t.v = t * (outside_tex[0]->v - inside_tex[1]->v) + inside_tex[1]->v;
+            out_tri2.V3.t.w = t * (outside_tex[0]->w - inside_tex[1]->w) + inside_tex[1]->w;
+
+            out_tri1.V1.pixel = V1.pixel;                                   // debugging out_tri1.V1.pixel = GREEN;
+            out_tri1.V2.pixel = V2.pixel;                                   // debugging out_tri1.V2.pixel = GREEN;
+            out_tri1.V3.pixel = V3.pixel;                                   // debugging out_tri1.V3.pixel = GREEN;
+            out_tri2.V1.pixel = V1.pixel;                                   // debugging out_tri2.V1.pixel = BLUE;
+            out_tri2.V2.pixel = V2.pixel;                                   // debugging out_tri2.V2.pixel = BLUE;
+            out_tri2.V3.pixel = V3.pixel;                                   // debugging out_tri2.V3.pixel = BLUE;
+            return 2;                                                       // Return two newly formed triangles which form a quad
+        }
+
+        return 0;
+    }
 };
 
 //---------------------------------------------------------------------------
@@ -1020,15 +1133,17 @@ void CEngine::DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel pix
     }
 }
 
-void CEngine::DrawTriangle(TTriangle t, Pixel pixel)
+void CEngine::DrawTriangle(TTriangle *t, Pixel pixel)
 {
-    DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V2.p.x, (int32_t)t.V2.p.y, pixel);
-    DrawLine((int32_t)t.V2.p.x, (int32_t)t.V2.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y, pixel);
-    DrawLine((int32_t)t.V1.p.x, (int32_t)t.V1.p.y, (int32_t)t.V3.p.x, (int32_t)t.V3.p.y, pixel);
+    DrawLine((int32_t)t->V1.p.x, (int32_t)t->V1.p.y, (int32_t)t->V2.p.x, (int32_t)t->V2.p.y, pixel);
+    DrawLine((int32_t)t->V2.p.x, (int32_t)t->V2.p.y, (int32_t)t->V3.p.x, (int32_t)t->V3.p.y, pixel);
+    DrawLine((int32_t)t->V1.p.x, (int32_t)t->V1.p.y, (int32_t)t->V3.p.x, (int32_t)t->V3.p.y, pixel);
 }
 
 void CEngine::TexturedTriangle(TTriangle* t)
 {
+    if (t->texture == nullptr) return;
+
     Pixel* pixels = GetDrawTarget()->GetData();
     CTexture* tex = t->texture;
 
@@ -1041,18 +1156,12 @@ void CEngine::TexturedTriangle(TTriangle* t)
     v1.x = (int)(t->V1.p.x); v2.x = (int)(t->V2.p.x); v3.x = (int)(t->V3.p.x);
     v1.y = (int)(t->V1.p.y); v2.y = (int)(t->V2.p.y); v3.y = (int)(t->V3.p.y);
     v1.w = (t->V1.t.w); v2.w = (t->V2.t.w); v3.w = (t->V3.t.w);
-
-    if (t->texture == nullptr) {
-        v1.u = 0; v1.v = 0; v2.u = 0; v2.v = 0; v3.u = 0; v3.v = 0;
-    }
-    else {
-        v1.u = ((t->V1.t.u * (t->texture->GetWidth() - 1)));
-        v1.v = ((t->V1.t.v * (t->texture->GetHeight() - 1)));
-        v2.u = ((t->V2.t.u * (t->texture->GetWidth() - 1)));
-        v2.v = ((t->V2.t.v * (t->texture->GetHeight() - 1)));
-        v3.u = ((t->V3.t.u * (t->texture->GetWidth() - 1)));
-        v3.v = ((t->V3.t.v * (t->texture->GetHeight() - 1)));
-    }
+    v1.u = ((t->V1.t.u * (t->texture->GetWidth() - 1)));
+    v1.v = ((t->V1.t.v * (t->texture->GetHeight() - 1)));
+    v2.u = ((t->V2.t.u * (t->texture->GetWidth() - 1)));
+    v2.v = ((t->V2.t.v * (t->texture->GetHeight() - 1)));
+    v3.u = ((t->V3.t.u * (t->texture->GetWidth() - 1)));
+    v3.v = ((t->V3.t.v * (t->texture->GetHeight() - 1)));
 
     auto lineTextured = [&](int ax, int bx, int y, float tex_su, float tex_eu, float tex_sv, float tex_ev, float tex_sw, float tex_ew) 
     {
@@ -1084,7 +1193,6 @@ void CEngine::TexturedTriangle(TTriangle* t)
         }
     };
 
-
     if (v1.y > v2.y) std::swap(v1, v2);                                     // sort the vertices (v1,v2,v3) by their Y values
     if (v1.y > v3.y) std::swap(v1, v3);
     if (v2.y > v3.y) std::swap(v2, v3);
@@ -1097,12 +1205,15 @@ void CEngine::TexturedTriangle(TTriangle* t)
     float tex_ew = v1.w;
 
     float du1_step = 0, dv1_step = 0,
-          du2_step = 0, dv2_step = 0,
-          dw1_step = 0, dw2_step = 0;
+        du2_step = 0, dv2_step = 0,
+        dw1_step = 0, dw2_step = 0;
     int xA, xB;
     int dxA_mul = 0, dxB_mul = 0;
     int dxA_div = 1, dxB_div = 1;
+
     int dy1 = abs(v2.y - v1.y);
+    int dy2 = abs(v3.y - v1.y);
+
     if (dy1) {
         dxA_mul = (v2.x - v1.x);
         dxA_div = dy1;
@@ -1110,7 +1221,6 @@ void CEngine::TexturedTriangle(TTriangle* t)
         dv1_step = (v2.v - v1.v) / (float)dy1;
         dw1_step = (v2.w - v1.w) / (float)dy1;
     }
-    int dy2 = abs(v3.y - v1.y);
     if (dy2) {
         dxB_mul = (v3.x - v1.x);
         dxB_div = dy2;
@@ -1163,51 +1273,26 @@ void CEngine::TexturedTriangle(TTriangle* t)
     }
 }
 
-void CEngine::FillTriangle(TTriangle t)
+void CEngine::ColoredTriangle(TTriangle* t)
 {
     struct intVertex {
         int x, y;
         int r, g, b;
-        int u, v;
-        float w;
     } v1, v2, v3;
 
-    if (t.texture == NULL) {
-        v1.r = (int)(t.V1.pixel.r * t.light); v1.g = (int)(t.V1.pixel.g * t.light); v1.b = (int)(t.V1.pixel.b * t.light);
-        v2.r = (int)(t.V2.pixel.r * t.light); v2.g = (int)(t.V2.pixel.g * t.light); v2.b = (int)(t.V2.pixel.b * t.light);
-        v3.r = (int)(t.V3.pixel.r * t.light); v3.g = (int)(t.V3.pixel.g * t.light); v3.b = (int)(t.V3.pixel.b * t.light);
-    }
-    else {
-        v1.u = (int)((t.V1.t.u * (t.texture->GetWidth()  - 1)) / t.V1.t.w);
-        v1.v = (int)((t.V1.t.v * (t.texture->GetHeight() - 1)) / t.V1.t.w);
-        v2.u = (int)((t.V2.t.u * (t.texture->GetWidth()  - 1)) / t.V2.t.w);
-        v2.v = (int)((t.V2.t.v * (t.texture->GetHeight() - 1)) / t.V2.t.w);
-        v3.u = (int)((t.V3.t.u * (t.texture->GetWidth()  - 1)) / t.V3.t.w);
-        v3.v = (int)((t.V3.t.v * (t.texture->GetHeight() - 1)) / t.V3.t.w);
-    }
+    v1.r = (int)(t->V1.pixel.r * t->light); v1.g = (int)(t->V1.pixel.g * t->light); v1.b = (int)(t->V1.pixel.b * t->light);
+    v2.r = (int)(t->V2.pixel.r * t->light); v2.g = (int)(t->V2.pixel.g * t->light); v2.b = (int)(t->V2.pixel.b * t->light);
+    v3.r = (int)(t->V3.pixel.r * t->light); v3.g = (int)(t->V3.pixel.g * t->light); v3.b = (int)(t->V3.pixel.b * t->light);
+    v1.x = (int)(t->V1.p.x);
+    v2.x = (int)(t->V2.p.x);
+    v3.x = (int)(t->V3.p.x);
+    v1.y = (int)(t->V1.p.y);
+    v2.y = (int)(t->V2.p.y);
+    v3.y = (int)(t->V3.p.y);
 
-    v1.x = (int)(t.V1.p.x);
-    v2.x = (int)(t.V2.p.x);
-    v3.x = (int)(t.V3.p.x);
-    v1.y = (int)(t.V1.p.y);
-    v2.y = (int)(t.V2.p.y);
-    v3.y = (int)(t.V3.p.y);
-    v1.w = (int)(t.V1.t.w);
-    v2.w = (int)(t.V2.t.w);
-    v3.w = (int)(t.V3.t.w);
-    //v1.w = (1.0f / t.V1.t.w);
-    //v2.w = (1.0f / t.V2.t.w);
-    //v3.w = (1.0f / t.V3.t.w);
-
-    if (v1.y > v2.y) {                                                      // sort the vertices (v1,v2,v3) by their Y values
-        std::swap(v1, v2);
-    }
-    if (v1.y > v3.y) {
-        std::swap(v1, v3);
-    }
-    if (v2.y > v3.y) {
-        std::swap(v2, v3);
-    }
+    if (v1.y > v2.y) std::swap(v1, v2);                                     // sort the vertices (v1,v2,v3) by their Y values
+    if (v1.y > v3.y) std::swap(v1, v3);
+    if (v2.y > v3.y) std::swap(v2, v3);
 
     Pixel* pixels = GetDrawTarget()->GetData();
     int screenx = ScreenWidth();
@@ -1223,21 +1308,13 @@ void CEngine::FillTriangle(TTriangle t)
     int dy31 = (v3.y - v1.y);                                              // dy31 will always be positive 
     int dy32 = (v3.y - v2.y);                                              // dy32 will always be positive 
 
-    float dWdX;
-    int dRdX_fract, dGdX_fract, dBdX_fract, dUdX_fract, dVdX_fract;
-    if (t.texture == NULL) {
-        dRdX_fract = ((v3.r - v1.r) * dy21 + (v1.r - v2.r) * dy31);
-        dGdX_fract = ((v3.g - v1.g) * dy21 + (v1.g - v2.g) * dy31);
-        dBdX_fract = ((v3.b - v1.b) * dy21 + (v1.b - v2.b) * dy31);
-    }
-    else {
-        dUdX_fract = ((v3.u - v1.u) * dy21 + (v1.u - v2.u) * dy31);
-        dVdX_fract = ((v3.v - v1.v) * dy21 + (v1.v - v2.v) * dy31);
-    }
+    int dRdX_fract, dGdX_fract, dBdX_fract;
+    dRdX_fract = ((v3.r - v1.r) * dy21 + (v1.r - v2.r) * dy31);
+    dGdX_fract = ((v3.g - v1.g) * dy21 + (v1.g - v2.g) * dy31);
+    dBdX_fract = ((v3.b - v1.b) * dy21 + (v1.b - v2.b) * dy31);
     int dX_denom   = ((v3.x - v1.x) * dy21 + (v1.x - v2.x) * dy31);
-    dWdX = ((v3.w - v1.w) * (float)dy21 + (v1.w - v2.w) * (float)dy31) / (float)dX_denom;
 
-    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _u, int _v, float _w, int _dy_denom) {
+    auto drawline = [&](int sx, int ex, int ny, int _r, int _g, int _b, int _dy_denom) {
 
         auto clipcolor = [](int c) {
             if (c < 0) return 0;
@@ -1251,41 +1328,16 @@ void CEngine::FillTriangle(TTriangle t)
         if (ex >= screenx) ex = screenx - 1;
         if (dX_denom == 0) dX_denom = 1;
 
-        if (t.texture == NULL) {
-            float w = _w;
-            int red   = (_r / _dy_denom) * dX_denom;
-            int green = (_g / _dy_denom) * dX_denom;
-            int blue  = (_b / _dy_denom) * dX_denom;
-            int offset = ny * screenx + sx;
-            for (int i = sx; i <= ex; i++) {
-                if (w > z_buffer[offset]) {
-                    z_buffer[offset] = w;
-                    pixels[offset] = Pixel(clipcolor(red / dX_denom), clipcolor(green / dX_denom), clipcolor(blue / dX_denom), 255);
-                }
-                offset++;
-                red += dRdX_fract;
-                green += dGdX_fract;
-                blue += dBdX_fract;
-                w += dWdX;
-            }
-        }
-        else {
-            float w = _w;
-            int upos = (_u / _dy_denom) * dX_denom;
-            int vpos = (_v / _dy_denom) * dX_denom;
-            int offset = ny * screenx + sx;
-            for (int i = sx; i <= ex; i++) {
-                if (w > z_buffer[offset]) {
-                    z_buffer[offset] = w;
-                    pixels[offset] = t.texture->GetPixel(upos / (dX_denom * w), vpos / (dX_denom * w)) * t.light;
-                    //pixels[offset] = t.texture->GetPixel(upos / (dX_denom), vpos / (dX_denom)) * t.light;
-                }
-
-                offset++;
-                upos += dUdX_fract;
-                vpos += dVdX_fract;
-                w += dWdX;
-            }
+        int red   = (_r / _dy_denom) * dX_denom;
+        int green = (_g / _dy_denom) * dX_denom;
+        int blue  = (_b / _dy_denom) * dX_denom;
+        int offset = ny * screenx + sx;
+        for (int i = sx; i <= ex; i++) {
+            pixels[offset] = Pixel(clipcolor(red / dX_denom), clipcolor(green / dX_denom), clipcolor(blue / dX_denom), 255);
+            offset++;
+            red += dRdX_fract;
+            green += dGdX_fract;
+            blue += dBdX_fract;
         }
     };
 
@@ -1296,53 +1348,29 @@ void CEngine::FillTriangle(TTriangle t)
     int xB = v1.x;
     int y = v1.y;
 
-    float w, dWdY;
-    int r = 0, g = 0, b = 0, u = 0, v = 0;
-    int dR_fract = 0, dG_fract = 0, dB_fract = 0, dU_fract = 0, dV_fract = 0;
+    int r = 0, g = 0, b = 0;
+    int dR_fract = 0, dG_fract = 0, dB_fract = 0;
     int dY_denom = dy21;
 
-    if (t.texture == NULL) {
-        dR_fract = (v2.r - v1.r);                                           // dR_fract = v2.r - v1.r + 4 * dRdX_fract / dX_denom;
-        dG_fract = (v2.g - v1.g);                                           // dG_fract = v2.g - v1.g + 4 * dGdX_fract / dX_denom;
-        dB_fract = (v2.b - v1.b);                                           // dB_fract = v2.b - v1.b + 4 * dBdX_fract / dX_denom;
-    }
-    else {
-        dU_fract = (v2.u - v1.u);
-        dV_fract = (v2.v - v1.v);
-    }
-    
+    dR_fract = (v2.r - v1.r);                                               // dR_fract = v2.r - v1.r + 4 * dRdX_fract / dX_denom;
+    dG_fract = (v2.g - v1.g);                                               // dG_fract = v2.g - v1.g + 4 * dGdX_fract / dX_denom;
+    dB_fract = (v2.b - v1.b);                                               // dB_fract = v2.b - v1.b + 4 * dBdX_fract / dX_denom;
+
     if (((v2.x - v1.x) * dy31) > ((v3.x - v1.x) * dy21)) {                  // V2 on the right side
-        if (t.texture == NULL) {
-            dR_fract = (v3.r - v1.r);
-            dG_fract = (v3.g - v1.g);
-            dB_fract = (v3.b - v1.b);
-        }
-        else {
-            dU_fract = (v3.u - v1.u);
-            dV_fract = (v3.v - v1.v); 
-        }
-        dWdY = (v3.w - v1.w);
+        dR_fract = (v3.r - v1.r);
+        dG_fract = (v3.g - v1.g);
+        dB_fract = (v3.b - v1.b);
         dY_denom = dy31;
-        v2OnRightSide = true;
-        
+        v2OnRightSide = true; 
     }
     else {
-        dWdY = (v2.w - v1.w);
         v2OnRightSide = false;
     }
     if (dY_denom == 0) dY_denom++;
-    dWdY /= (float)dY_denom;
 
-    if (t.texture == NULL) {
-        r = v1.r * dY_denom;                                                // (v1.r - 4 * dRdX_fract / dX_denom) * dY_denom;
-        g = v1.g * dY_denom;                                                // (v1.g - 4 * dGdX_fract / dX_denom) * dY_denom;
-        b = v1.b * dY_denom;                                                // (v1.b - 4 * dBdX_fract / dX_denom) * dY_denom;
-    }
-    else {
-        u = v1.u * dY_denom;
-        v = v1.v * dY_denom;
-    }
-    w = v1.w;
+    r = v1.r * dY_denom;                                                    // (v1.r - 4 * dRdX_fract / dX_denom) * dY_denom;
+    g = v1.g * dY_denom;                                                    // (v1.g - 4 * dGdX_fract / dX_denom) * dY_denom;
+    b = v1.b * dY_denom;                                                    // (v1.b - 4 * dBdX_fract / dX_denom) * dY_denom;
 
     if (dy21 > dx21) { std::swap(dx21, dy21); changed1 = true; }
     else { changed1 = false; }
@@ -1399,16 +1427,13 @@ void CEngine::FillTriangle(TTriangle t)
                 if (maxx < xB) maxx = xB;
             }
 
-            drawline(minx, maxx, y, r, g, b, u, v, w, dY_denom);
+            drawline(minx, maxx, y, r, g, b, dY_denom);
             xA += eAp;
             xB += eBp;
             y++;                                                            // Now increase y
             r += dR_fract;
             g += dG_fract;
             b += dB_fract;
-            u += dU_fract;
-            v += dV_fract;
-            w += dWdY;
             if (y == v2.y) break;
             if (y == screeny) return;
         }
@@ -1417,22 +1442,12 @@ void CEngine::FillTriangle(TTriangle t)
     if (!v2OnRightSide) {
         dY_denom = dy32;
         if (dY_denom == 0) dY_denom++;
-        if (t.texture == NULL) {
-            dR_fract = (v3.r - v2.r);
-            dG_fract = (v3.g - v2.g);
-            dB_fract = (v3.b - v2.b);
-            r = v2.r * dY_denom;
-            g = v2.g * dY_denom;
-            b = v2.b * dY_denom;
-        }
-        else {
-            dU_fract = (v3.u - v2.u);
-            dV_fract = (v3.v - v2.v);
-            u = v2.u * dY_denom;
-            v = v2.v * dY_denom;
-        }
-        dWdY = (v3.w - v2.w) / (float)dY_denom;
-        w = v2.w;
+        dR_fract = (v3.r - v2.r);
+        dG_fract = (v3.g - v2.g);
+        dB_fract = (v3.b - v2.b);
+        r = v2.r * dY_denom;
+        g = v2.g * dY_denom;
+        b = v2.b * dY_denom;
     }
 
     if (dy32 > dx32) { std::swap(dx32, dy32); changed1 = true; }
@@ -1491,16 +1506,13 @@ void CEngine::FillTriangle(TTriangle t)
             if (maxx < xB) maxx = xB;
         }
 
-        drawline(minx, maxx, y, r, g, b, u, v, w, dY_denom);
+        drawline(minx, maxx, y, r, g, b, dY_denom);
         xA += eAp;
         xB += eBp;
         y++;                                                                // Now increase y
         r += dR_fract;
         g += dG_fract;
         b += dB_fract;
-        u += dU_fract;
-        v += dV_fract;
-        w += dWdY;
         if (y > v3.y) break;
         if (y == screeny) return;
     }

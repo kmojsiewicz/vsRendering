@@ -59,129 +59,20 @@ public:
         return true;
     }
 
-    int Triangle_ClipAgainstPlane(TVec3d plane_p, TVec3d plane_n, TTriangle& in_tri, TTriangle& out_tri1, TTriangle& out_tri2)
-    {
-        plane_n = Vector_Normalise(plane_n);                                // Make sure plane normal is indeed normal
-
-        auto dist = [&](TVec3d& p) {                                        // Return signed shortest distance from point to plane, plane normal must be normalised
-            TVec3d n = Vector_Normalise(p);
-            return (plane_n.x * p.x + plane_n.y * p.y + plane_n.z * p.z - Vector_DotProduct(plane_n, plane_p));
-        };
-
-        TVec3d* inside_points[3];  int nInsidePointCount = 0;               // Create two temporary storage arrays to classify points either side of plane
-        TVec3d* outside_points[3]; int nOutsidePointCount = 0;              // If distance sign is positive, point lies on "inside" of plane
-        TVec2d* inside_tex[3];  int nInsideTexCount = 0;
-        TVec2d* outside_tex[3]; int nOutsideTexCount = 0;
-
-        float d0 = dist(in_tri.V1.p);                                       // Get signed distance of each point in triangle to plane
-        float d1 = dist(in_tri.V2.p);
-        float d2 = dist(in_tri.V3.p);
-        if (d0 >= 0) { 
-            inside_points[nInsidePointCount++] = &in_tri.V1.p; 
-            inside_tex[nInsideTexCount++] = &in_tri.V1.t;
-        }
-        else { 
-            outside_points[nOutsidePointCount++] = &in_tri.V1.p; 
-            outside_tex[nOutsideTexCount++] = &in_tri.V1.t;
-        }
-        if (d1 >= 0) { 
-            inside_points[nInsidePointCount++] = &in_tri.V2.p; 
-            inside_tex[nInsideTexCount++] = &in_tri.V2.t;
-        }
-        else { 
-            outside_points[nOutsidePointCount++] = &in_tri.V2.p; 
-            outside_tex[nOutsideTexCount++] = &in_tri.V2.t;
-        }
-        if (d2 >= 0) { 
-            inside_points[nInsidePointCount++] = &in_tri.V3.p; 
-            inside_tex[nInsideTexCount++] = &in_tri.V3.t;
-        }
-        else { 
-            outside_points[nOutsidePointCount++] = &in_tri.V3.p; 
-            outside_tex[nOutsideTexCount++] = &in_tri.V3.t;
-        }
-
-        // Now classify triangle points, and break the input triangle into 
-        // smaller output triangles if required. There are four possible outcomes...
-        if (nInsidePointCount == 0) {                                       // All points lie on the outside of plane, so clip whole triangle
-            return 0;                                                       // No returned triangles are valid
-        }
-
-        if (nInsidePointCount == 3) {                                       // All points lie on the inside of plane, so do nothing
-            out_tri1 = in_tri;                                              // and allow the triangle to simply pass through
-            return 1;                                                       // Just the one returned original triangle is valid
-        }
-
-        if (nInsidePointCount == 1 && nOutsidePointCount == 2) {            // Triangle should be clipped. As two points lie outside the plane, the triangle simply becomes a smaller triangle
-            out_tri1.light = in_tri.light;                                  // Copy appearance info to new triangle
-            out_tri1.texture = in_tri.texture;
-            out_tri1.V1.p = *inside_points[0];                              // The inside point is valid, so keep that...
-            out_tri1.V1.t = *inside_tex[0];
-            // but the two new points are at the locations where the 
-            // original sides of the triangle (lines) intersect with the plane
-            float t;
-            out_tri1.V2.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0], t);
-            out_tri1.V2.t.u = t * (outside_tex[0]->u - inside_tex[0]->u) + inside_tex[0]->u;
-            out_tri1.V2.t.v = t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
-            out_tri1.V2.t.w = t * (outside_tex[0]->w - inside_tex[0]->w) + inside_tex[0]->w;
-            out_tri1.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[1], t);
-            out_tri1.V3.t.u = t * (outside_tex[1]->u - inside_tex[0]->u) + inside_tex[0]->u;
-            out_tri1.V3.t.v = t * (outside_tex[1]->v - inside_tex[0]->v) + inside_tex[0]->v;
-            out_tri1.V3.t.w = t * (outside_tex[1]->w - inside_tex[0]->w) + inside_tex[0]->w;
-
-            out_tri1.V1.pixel = in_tri.V1.pixel;                            // out_tri1.V1.pixel = RED;
-            out_tri1.V2.pixel = in_tri.V2.pixel;                            // out_tri1.V2.pixel = RED;
-            out_tri1.V3.pixel = in_tri.V3.pixel;                            // out_tri1.V3.pixel = RED;
-            return 1;                                                       // Return the newly formed single triangle
-        }
-
-        if (nInsidePointCount == 2 && nOutsidePointCount == 1) {            // Triangle should be clipped. As two points lie inside the plane, the clipped triangle becomes a "quad". Fortunately, we can
-            out_tri1.light = in_tri.light;                                  // represent a quad with two new triangles
-            out_tri2.light = in_tri.light;                                  // Copy appearance info to new triangles
-            out_tri1.texture = in_tri.texture;
-            out_tri2.texture = in_tri.texture;
-            // The first triangle consists of the two inside points and a new
-            // point determined by the location where one side of the triangle
-            // intersects with the plane
-            float t;
-            out_tri1.V1.p = *inside_points[0];
-            out_tri1.V2.p = *inside_points[1];
-            out_tri1.V1.t = *inside_tex[0];
-            out_tri1.V2.t = *inside_tex[1];
-            out_tri1.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0], t);
-            out_tri1.V3.t.u = t * (outside_tex[0]->u - inside_tex[0]->u) + inside_tex[0]->u;
-            out_tri1.V3.t.v = t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
-            out_tri1.V3.t.w = t * (outside_tex[0]->w - inside_tex[0]->w) + inside_tex[0]->w;
-            // The second triangle is composed of one of he inside points, a
-            // new point determined by the intersection of the other side of the 
-            // triangle and the plane, and the newly created point above
-            out_tri2.V1.p = *inside_points[1];
-            out_tri2.V1.t = *inside_tex[1];
-            out_tri2.V2.p = out_tri1.V3.p;
-            out_tri2.V2.t = out_tri1.V3.t;
-            out_tri2.V3.p = Vector_IntersectPlane(plane_p, plane_n, *inside_points[1], *outside_points[0], t);
-            out_tri2.V3.t.u = t * (outside_tex[0]->u - inside_tex[1]->u) + inside_tex[1]->u;
-            out_tri2.V3.t.v = t * (outside_tex[0]->v - inside_tex[1]->v) + inside_tex[1]->v;
-            out_tri2.V3.t.w = t * (outside_tex[0]->w - inside_tex[1]->w) + inside_tex[1]->w;
-
-            out_tri1.V1.pixel = in_tri.V1.pixel;                            // out_tri1.V1.pixel = GREEN;
-            out_tri1.V2.pixel = in_tri.V2.pixel;                            // out_tri1.V2.pixel = GREEN;
-            out_tri1.V3.pixel = in_tri.V3.pixel;                            // out_tri1.V3.pixel = GREEN;
-            out_tri2.V1.pixel = in_tri.V1.pixel;                            // out_tri2.V1.pixel = BLUE;
-            out_tri2.V2.pixel = in_tri.V2.pixel;                            // out_tri2.V2.pixel = BLUE;
-            out_tri2.V3.pixel = in_tri.V3.pixel;                            // out_tri2.V3.pixel = BLUE;
-            return 2;                                                       // Return two newly formed triangles which form a quad
-        }
-
-        return 0;
-    }
-
     bool OnUserUpdate(float fElapsedTime) override
     {
         if (GetKey(VK_UP).bHeld)    vCamera.y += (GetKey(VK_SHIFT).bHeld) ? 16.0f * fElapsedTime : 8.0f * fElapsedTime;
         if (GetKey(VK_DOWN).bHeld)  vCamera.y -= (GetKey(VK_SHIFT).bHeld) ? 16.0f * fElapsedTime : 8.0f * fElapsedTime;
-        if (GetKey(VK_LEFT).bHeld)  vCamera.x -= 8.0f * fElapsedTime;
-        if (GetKey(VK_RIGHT).bHeld) vCamera.x += 8.0f * fElapsedTime;
+        if (GetKey(VK_LEFT).bHeld) {
+            TMat4x4 matRotateToLeft = Matrix_MakeRotationY(-M_PI_2);
+            TVec3d vLookLeftDir = Matrix_MultiplyVector(matRotateToLeft, vLookDir);
+            vCamera = Vector_Add(vCamera, vLookLeftDir);
+        }
+        if (GetKey(VK_RIGHT).bHeld) {
+            TMat4x4 matRotateToRight = Matrix_MakeRotationY(M_PI_2);
+            TVec3d vLookRightDir = Matrix_MultiplyVector(matRotateToRight, vLookDir);
+            vCamera = Vector_Add(vCamera, vLookRightDir);
+        }
         
         TVec3d vForward = Vector_Mul(vLookDir, 8.0f * fElapsedTime);
         TVec3d vForward2 = Vector_Mul(vForward, 2.0f);
@@ -243,7 +134,7 @@ public:
                 // additional triangles. 
                 int nClippedTriangles = 0;
                 TTriangle clipped[2];
-                nClippedTriangles = Triangle_ClipAgainstPlane({ 0.0f, 0.0f, 0.1f }, { 0.0f, 0.0f, 1.0f }, triViewed, clipped[0], clipped[1]);
+                nClippedTriangles = triViewed.Triangle_ClipAgainstPlane({ 0.0f, 0.0f, 0.1f }, { 0.0f, 0.0f, 1.0f }, clipped[0], clipped[1]);
 
                 for (int n = 0; n < nClippedTriangles; n++)                 // We may end up with multiple triangles form the clip, so project as required
                 {
@@ -292,7 +183,6 @@ public:
              });
         print_diff_timepoint("Sorting time      : ");
 
-
         ClrZBuffer();                                                       // Clear Screen and Z buffer
         Clear(BLUE);
 
@@ -317,10 +207,10 @@ public:
                     // to lie on the inside of the plane. I like how this
                     // comment is almost completely and utterly justified
                     switch (p) {
-                    case 0:	nTrisToAdd = Triangle_ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, test, clipped[0], clipped[1]); break;
-                    case 1:	nTrisToAdd = Triangle_ClipAgainstPlane({ 0.0f, (float)ScreenHeight() - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, test, clipped[0], clipped[1]); break;
-                    case 2:	nTrisToAdd = Triangle_ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, test, clipped[0], clipped[1]); break;
-                    case 3:	nTrisToAdd = Triangle_ClipAgainstPlane({ (float)ScreenWidth() - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, test, clipped[0], clipped[1]); break;
+                    case 0:	nTrisToAdd = test.Triangle_ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, clipped[0], clipped[1]); break;
+                    case 1:	nTrisToAdd = test.Triangle_ClipAgainstPlane({ 0.0f, (float)ScreenHeight() - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, clipped[0], clipped[1]); break;
+                    case 2:	nTrisToAdd = test.Triangle_ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, clipped[0], clipped[1]); break;
+                    case 3:	nTrisToAdd = test.Triangle_ClipAgainstPlane({ (float)ScreenWidth() - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, clipped[0], clipped[1]); break;
                     }
                     // Clipping may yield a variable number of triangles, so
                     // add these new ones to the back of the queue for subsequent
@@ -330,11 +220,6 @@ public:
                 nNewTriangles = (int)listTriangles.size();
             }
             for (auto& t : listTriangles) {                                 // Draw the transformed, viewed, clipped, projected, sorted, clipped triangles
-                //FillTriangle(t);                                            // Rasterize triangle
-                //DrawTriangle(t, t.V1.pixel);
-                //TexturedTriangle(t.V1.p.x, t.V1.p.y, t.V1.t.u, t.V1.t.v, t.V1.t.w,
-                //    t.V2.p.x, t.V2.p.y, t.V2.t.u, t.V2.t.v, t.V2.t.w,
-                //    t.V3.p.x, t.V3.p.y, t.V3.t.u, t.V3.t.v, t.V3.t.w, t.texture);
                 TexturedTriangle(&t);
             }
         }

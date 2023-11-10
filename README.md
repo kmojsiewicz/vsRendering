@@ -11,7 +11,7 @@ Vertices can be read from OBJ files.
 Matrix operations were used to rotate and display the object : rotation around the Z axis,
 rotation around the X axis, translation and projection.
 Filling the triangles is done by interpolating the colors of the vertices 
-or using textures with a fast algorithm without using floating-point numbers.
+or using textures.
 Pixel setting is done directly on memory.
 
 ## Getting Started
@@ -31,7 +31,7 @@ Krzysztof Mojsiewicz
 
 ## Version History
 
-* 1.0.0.9
+* 1.0.0.10
     * Initial Release
 
 ## License
