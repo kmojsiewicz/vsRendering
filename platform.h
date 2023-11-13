@@ -37,6 +37,7 @@
 
 class CPlatform;
 static std::unique_ptr<CPlatform> engine = nullptr;
+constexpr uint8_t  nMouseButtons = 5;
 
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
@@ -144,6 +145,17 @@ public:
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 
+struct HWButton																// HWButton - Represents the state of a hardware button (mouse/key/joy)
+{
+	bool bPressed = false;													// Set once during the frame the event occurs
+	bool bReleased = false;													// Set once during the frame the event occurs
+	bool bHeld = false;														// Set true for all frames between pressed and released events
+};
+
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+
 class CPlatform
 {
 public:
@@ -177,6 +189,7 @@ private:
 
 	HDC			glDeviceContext = 0;
 	HGLRC		glRenderContext = 0;
+	bool		bHasInputFocus = false;
 	bool		b_glSync = false;
 
 	CLayer		layer;
@@ -188,7 +201,6 @@ private:
 	int			ThreadCleanUp()					{ RenderDestroyDevice(); PostMessage(hWnd, WM_DESTROY, 0, 0); return 1; }
 	void		RedirectIOToConsole();
 	int			CreateWindowPane(int iWindowPosX, int iWindowPosY);
-	void		UpdateWindowSize(int32_t x, int32_t y) { iWindowSizeX = x; iWindowSizeY = y; UpdateViewport(); }
 	void		UpdateViewport();
 	int			CreateGraphics();
 	int			ApplicationStartUp()			{ return 1; }
@@ -204,16 +216,25 @@ private:
 	// State of keyboard
 	short m_keyOldState[256] = { 0 };
 	short m_keyNewState[256] = { 0 };
-	bool m_mouseOldState[5] = { 0 };
-	bool m_mouseNewState[5] = { 0 };
-	int m_mousePosX;
-	int m_mousePosY;
-
 	struct sKeyState {
 		bool bPressed;
 		bool bReleased;
 		bool bHeld;
 	} m_keys[256], m_mouse[5];
+
+	// State of mouse
+	bool bHasMouseFocus = false;
+	int32_t		nMouseWheelDelta = 0;
+	int32_t		nMouseWheelDeltaCache = 0;
+	bool		pMouseNewState[nMouseButtons] = { 0 };
+	bool		pMouseOldState[nMouseButtons] = { 0 };
+	HWButton	pMouseState[nMouseButtons] = { 0 };
+	int			iMousePosCacheX = 0;
+	int			iMousePosCacheY = 0;
+	int			iMousePosX = 0;
+	int			iMousePosY = 0;
+	int			iMouseWindowPosX = 0;
+	int			iMouseWindowPosY = 0;
 
 public:
 	uint32_t	RenderCreateTexture(const uint32_t width, const uint32_t height, const bool filtered, const bool clamp);
@@ -233,7 +254,7 @@ public: // User Override Interfaces
 	virtual bool OnUserDestroy()				{ return true; }			// Called once on application termination, so you can be one clean coder
 	void		PrepareEngine();
 	void		CoreUpdate();
-	void		Terminate() { bAtomActive = false; }
+	void		Terminate()                     { bAtomActive = false; }
 
 public:
 	int32_t ScreenWidth() const					{ return iScreenSizeX; }	// Returns the width of the screen in "pixels"
@@ -242,8 +263,20 @@ public:
 	CLayer* GetDrawTarget()						{ return &layer; }
 
 public:																		// Hardware Interfaces
+	bool IsFocused() const { return bHasInputFocus; }
+	void UpdateWindowSize(int32_t x, int32_t y) { iWindowSizeX = x; iWindowSizeY = y; UpdateViewport(); }
 	sKeyState GetKey(int nKeyID) { return m_keys[nKeyID]; }					// Get the state of a specific keyboard button
-
+	void UpdateKeyFocus(bool state)				{ bHasInputFocus = state; }
+	void UpdateMouseFocus(bool state)    { bHasMouseFocus = state; }
+	void UpdateMouseState(int32_t button, bool state) { pMouseNewState[button] = state; }
+	void UpdateMouseWheel(int32_t delta) { nMouseWheelDeltaCache += delta; }
+	void UpdateMouse(int32_t x, int32_t y);
+	HWButton GetMouse(uint32_t b) const  { return pMouseState[b]; }			// Get the state of a specific mouse button
+	int32_t GetMouseWheel() const { return nMouseWheelDelta; }				// Get Mouse Wheel Delta
+	int32_t GetMouseX() const { return iMousePosX; }						// Get Mouse X coordinate in "pixel" space
+	int32_t GetMouseY() const { return iMousePosY; }						// Get Mouse Y coordinate in "pixel" space
+	int32_t GetWindowMouseX() const { return iMouseWindowPosX; }			// Get Mouse X in window space
+	int32_t GetWindowMouseY() const { return iMouseWindowPosY; }			// Get Mouse Y in window space
 public:																		// Branding
 	std::string sAppName;
 
@@ -324,8 +357,6 @@ CPlatform::CPlatform()
 	std::memset(m_keyNewState, 0, 256 * sizeof(short));
 	std::memset(m_keyOldState, 0, 256 * sizeof(short));
 	std::memset(m_keys, 0, 256 * sizeof(sKeyState));
-	m_mousePosX = 0;
-	m_mousePosY = 0;
 }
 
 CPlatform::~CPlatform()
@@ -343,12 +374,47 @@ int CPlatform::StartSystemEventLoop()
 	return 1;
 }
 
+void CPlatform::UpdateMouse(int32_t x, int32_t y)
+{
+	// Mouse coords come in screen space but leave in pixel space
+	bHasMouseFocus = true;
+	iMouseWindowPosX = x;
+	iMouseWindowPosY = y;
+	// Full Screen mode may have a weird viewport we must clamp to
+	x -= iViewPosX;
+	y -= iViewPosY;
+	iMousePosCacheX = (int32_t)(((float)x / (float)(iWindowSizeX - (iViewPosX * 2)) * (float)iScreenSizeX));
+	iMousePosCacheY = (int32_t)(((float)y / (float)(iWindowSizeY - (iViewPosY * 2)) * (float)iScreenSizeY));
+	if (iMousePosCacheX >= (int32_t)iScreenSizeX)	iMousePosCacheX = iScreenSizeX - 1;
+	if (iMousePosCacheY >= (int32_t)iScreenSizeY)	iMousePosCacheY = iScreenSizeY - 1;
+	if (iMousePosCacheX < 0) iMousePosCacheX = 0;
+	if (iMousePosCacheY < 0) iMousePosCacheY = 0;
+}
+
 // Windows Event Handler - this is statically connected to the windows event system
 static LRESULT CALLBACK WindowEvent(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch (uMsg) {
-	case WM_CLOSE:		engine->Terminate(); return 0;
-	case WM_DESTROY:	PostQuitMessage(0);	return 0;
+	case WM_MOUSEMOVE:
+	{
+		uint16_t x = lParam & 0xFFFF; uint16_t y = (lParam >> 16) & 0xFFFF;
+		int16_t ix = *(int16_t*)&x;   int16_t iy = *(int16_t*)&y;
+		engine->UpdateMouse(ix, iy);
+		return 0;
+	}
+	case WM_LBUTTONDOWN: engine->UpdateMouseState(0, true);                                  return 0;
+	case WM_LBUTTONUP:	 engine->UpdateMouseState(0, false);                                 return 0;
+	case WM_RBUTTONDOWN: engine->UpdateMouseState(1, true);                                  return 0;
+	case WM_RBUTTONUP:	 engine->UpdateMouseState(1, false);                                 return 0;
+	case WM_MBUTTONDOWN: engine->UpdateMouseState(2, true);                                  return 0;
+	case WM_MBUTTONUP:	 engine->UpdateMouseState(2, false);                                 return 0;
+	case WM_MOUSELEAVE:  engine->UpdateMouseFocus(false);                                    return 0;
+	case WM_MOUSEWHEEL:	 engine->UpdateMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam));           return 0;
+	case WM_SIZE:        engine->UpdateWindowSize(lParam & 0xFFFF, (lParam >> 16) & 0xFFFF); return 0;
+	case WM_SETFOCUS:	 engine->UpdateKeyFocus(true);                                       return 0;
+	case WM_KILLFOCUS:	 engine->UpdateKeyFocus(false);                                      return 0;
+	case WM_CLOSE:		 engine->Terminate();                                                return 0;
+	case WM_DESTROY:	 PostQuitMessage(0);	                                             return 0;
 	}
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
@@ -516,6 +582,26 @@ void CPlatform::CoreUpdate()
 	float fElapsedTime = elapsedTime.count();								// Our time per frame coefficient
 	fLastElapsed = fElapsedTime;
 
+	// Compare hardware input states from previous frame
+	auto ScanHardware = [&](HWButton* pKeys, bool* pStateOld, bool* pStateNew, uint32_t nKeyCount)
+	{
+		for (uint32_t i = 0; i < nKeyCount; i++) {
+			pKeys[i].bPressed = false;
+			pKeys[i].bReleased = false;
+			if (pStateNew[i] != pStateOld[i]) {
+				if (pStateNew[i]) {
+					pKeys[i].bPressed = !pKeys[i].bHeld;
+					pKeys[i].bHeld = true;
+				}
+				else {
+					pKeys[i].bReleased = true;
+					pKeys[i].bHeld = false;
+				}
+			}
+			pStateOld[i] = pStateNew[i];
+		}
+	};
+
 	for (int i = 0; i < 256; i++) {											// Handle Keyboard Input
 		m_keyNewState[i] = GetAsyncKeyState(i);
 		m_keys[i].bPressed = false;
@@ -533,6 +619,14 @@ void CPlatform::CoreUpdate()
 		}
 		m_keyOldState[i] = m_keyNewState[i];
 	}
+
+	ScanHardware(pMouseState, pMouseOldState, pMouseNewState, nMouseButtons);
+
+	// Cache mouse coordinates so they remain consistent during frame
+	iMousePosX = iMousePosCacheX;
+	iMousePosY = iMousePosCacheY;
+	nMouseWheelDelta = nMouseWheelDeltaCache;
+	nMouseWheelDeltaCache = 0;
 
 	try {
 		if (!OnUserUpdate(fElapsedTime)) bAtomActive = false;

@@ -32,12 +32,13 @@ private:
                                       elapsed_sec = tp_end - tp_start; \
                                       cout << __VA_ARGS__ << std::chrono::duration_cast<std::chrono::microseconds>(elapsed_sec).count() << " us" << endl; } }
 
-
     CTexture leftTexture, topTexture, rightTexture, bottomTexture, frontTexture, backTexture;
     TMesh mesh;
     TMat4x4 matProj;
     TVec3d vCamera;                                                         // Location of camera in world space
     TVec3d vLookDir;	                                                    // Direction vector along the direction camera points
+    TVec3d vMousePos;
+    float fXaw;		                                                        // FPS Camera rotation in YZ plane
     float fYaw;		                                                        // FPS Camera rotation in XZ plane
     float fTheta;                                                           // Spins World transform
 
@@ -61,44 +62,49 @@ public:
 
     bool OnUserUpdate(float fElapsedTime) override
     {
-        if (GetKey(VK_UP).bHeld)    vCamera.y += (GetKey(VK_SHIFT).bHeld) ? 16.0f * fElapsedTime : 8.0f * fElapsedTime;
-        if (GetKey(VK_DOWN).bHeld)  vCamera.y -= (GetKey(VK_SHIFT).bHeld) ? 16.0f * fElapsedTime : 8.0f * fElapsedTime;
-        if (GetKey(VK_LEFT).bHeld) {
-            TMat4x4 matRotateToLeft = Matrix_MakeRotationY(-M_PI_2);
-            TVec3d vLookLeftDir = Matrix_MultiplyVector(matRotateToLeft, vLookDir);
-            vCamera = Vector_Add(vCamera, vLookLeftDir);
-        }
-        if (GetKey(VK_RIGHT).bHeld) {
-            TMat4x4 matRotateToRight = Matrix_MakeRotationY(M_PI_2);
-            TVec3d vLookRightDir = Matrix_MultiplyVector(matRotateToRight, vLookDir);
-            vCamera = Vector_Add(vCamera, vLookRightDir);
-        }
-        
-        TVec3d vForward = Vector_Mul(vLookDir, 8.0f * fElapsedTime);
-        TVec3d vForward2 = Vector_Mul(vForward, 2.0f);
-        if (GetKey(L'W').bHeld) {
-            vCamera = (GetKey(VK_SHIFT).bHeld) ? Vector_Add(vCamera, vForward2) : Vector_Add(vCamera, vForward);
-            cout << vCamera.z << endl;
-        }
-        if (GetKey(L'S').bHeld) vCamera = (GetKey(VK_SHIFT).bHeld) ? Vector_Sub(vCamera, vForward2) : Vector_Sub(vCamera, vForward);
-        if (GetKey(L'A').bHeld) fYaw -= 2.0f * fElapsedTime;
-        if (GetKey(L'D').bHeld) fYaw += 2.0f * fElapsedTime;
-        if (GetKey(L' ').bHeld) fTheta += 1.0f * fElapsedTime;
-        if (GetKey(L'1').bHeld) frontTexture.LoadFromBitmap("high.bmp");
+        if (IsFocused()) {
+            fYaw += (GetWindowMouseX() - vMousePos.x) / (32 * M_PI);
+            fXaw += (GetWindowMouseY() - vMousePos.y) / (32 * M_PI);
+            if (fXaw > 3 * M_PI / 8)  fXaw = 3 * M_PI / 8;
+            if (fXaw < -3 * M_PI / 8) fXaw = -3 * M_PI / 8;
+            vMousePos.x = GetWindowMouseX();
+            vMousePos.y = GetWindowMouseY();
 
-        //vCamera.z = 131;
+            if (GetKey(VK_UP).bHeld)    vCamera.y += (GetKey(VK_SHIFT).bHeld) ? 16.0f * fElapsedTime : 8.0f * fElapsedTime;
+            if (GetKey(VK_DOWN).bHeld)  vCamera.y -= (GetKey(VK_SHIFT).bHeld) ? 16.0f * fElapsedTime : 8.0f * fElapsedTime;
+            if (GetKey(VK_LEFT).bHeld) {
+                TMat4x4 matRotateToLeft = Matrix_MakeRotationY((float) - M_PI_2);
+                TVec3d vLookLeftDir = Matrix_MultiplyVector(matRotateToLeft, vLookDir);
+                vCamera = Vector_Add(vCamera, vLookLeftDir);
+            }
+            if (GetKey(VK_RIGHT).bHeld) {
+                TMat4x4 matRotateToRight = Matrix_MakeRotationY((float) M_PI_2);
+                TVec3d vLookRightDir = Matrix_MultiplyVector(matRotateToRight, vLookDir);
+                vCamera = Vector_Add(vCamera, vLookRightDir);
+            }
+
+            TVec3d vForward = Vector_Mul(vLookDir, 8.0f * fElapsedTime);
+            TVec3d vForward2 = Vector_Mul(vForward, 2.0f);
+            if (GetKey(L'W').bHeld) vCamera = (GetKey(VK_SHIFT).bHeld) ? Vector_Add(vCamera, vForward2) : Vector_Add(vCamera, vForward);
+            if (GetKey(L'S').bHeld) vCamera = (GetKey(VK_SHIFT).bHeld) ? Vector_Sub(vCamera, vForward2) : Vector_Sub(vCamera, vForward);
+            if (GetKey(L'A').bHeld) fYaw -= 2.0f * fElapsedTime;
+            if (GetKey(L'D').bHeld) fYaw += 2.0f * fElapsedTime;
+            if (GetKey(L' ').bHeld) fTheta += 1.0f * fElapsedTime;
+        }
 
         get_timepoint();
-            TMat4x4 matRotZ = Matrix_MakeRotationZ(fTheta);                 // Rotation Z
-            TMat4x4 matRotX = Matrix_MakeRotationX(fTheta * 0.5f);          // Rotation X
+            TMat4x4 matWorldRotZ = Matrix_MakeRotationZ(fTheta);            // Rotation Z
+            TMat4x4 matWorldRotX = Matrix_MakeRotationX(fTheta * 0.5f);     // Rotation X
             TMat4x4 matTrans = Matrix_MakeTranslation(0.0f, 0.0f, 5.0f);
             TMat4x4 matWorld = Matrix_MakeIdentity();                       // Form World Matrix
-            matWorld = Matrix_MultiplyMatrix(matRotZ, matRotX);             // Transform by rotation (Rotation in Z-Axis and X-Axis)
+            matWorld = Matrix_MultiplyMatrix(matWorldRotZ, matWorldRotX);   // Transform by rotation (Rotation in Z-Axis and X-Axis)
             matWorld = Matrix_MultiplyMatrix(matWorld, matTrans);           // Transform by translation
 
             TVec3d vUp = { 0, 1, 0 };
             TVec3d vTarget = { 0, 0, 1 };
-            TMat4x4 matCameraRot = Matrix_MakeRotationY(fYaw);
+            TMat4x4 matCameraRotY = Matrix_MakeRotationY(fYaw);
+            TMat4x4 matCameraRotX = Matrix_MakeRotationX(fXaw);
+            TMat4x4 matCameraRot = Matrix_MultiplyMatrix(matCameraRotX, matCameraRotY);   // Transform by rotation (Rotation in Z-Axis and X-Axis)
             vLookDir = Matrix_MultiplyVector(matCameraRot, vTarget);
             vTarget = Vector_Add(vCamera, vLookDir);
             TMat4x4 matCamera = Matrix_PointAt(vCamera, vTarget, vUp);      // Create "Point At" Matrix for camera
